@@ -1,458 +1,466 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using MTFrame.MTEvent;
 using System;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.UI;
+using MTFrame.MTEvent;
+using TMPro;
+using DG.Tweening;
+using Lean.Pool;
 
-public enum ResultType
-{
-    左边胜利 = 0,
-    右边胜利 = 1,
-    平局 = 2
-}
+public enum ResultType { 左边胜利 = 0, 右边胜利 = 1, 平局 = 2 }
 
+/// <summary>五关共用：准备语音、ReadyGo、游戏/答题倒计时、双方计分、切题间隔和结算。</summary>
 public abstract class BaseGameManager : MonoBehaviour
 {
-    [Header("背景音乐")]
+    [Header("音频")]
     public AudioSource BGM;
+    public AudioSource PreparationVoiceSource;
+    public AudioClip PreparationVoiceClip;
+    public bool WaitForExternalPreparationVoice;
 
-    [Header("游戏时长（秒）")]
-    protected float GameTime = 60f;
+    [Header("时间")]
+    [Min(1)] private float GameDuration = 15f;
+    [Min(1)] public float QuestionDuration = 10f;
+    [Min(0)] public float NextQuestionInterval = 1f;
 
-    [Header("游戏当前状态")]
-    public bool IsGameRunning = false;
+    public Text GameTimerText;
+    public TextMeshProUGUI leftScoreText;
+    public TextMeshProUGUI rightScoreText;
 
-    protected int leftScore = 0;
-    protected int rightScore = 0;
+    [Header("分数滚动动画")]
+    [Min(0)] public float ScoreRollDuration = 0.45f;
+    public Ease ScoreRollEase = Ease.OutCubic;
 
-    [Header("游戏计时器")]
-    protected float gameTimer = 0f;
+    [Tooltip("答题倒计时：开始为满格，时间结束为0")]
+    public Image QuestionTimerImage;
 
-    [Header("游戏倒计时文本（可选）")]
-    public UnityEngine.UI.Text GameTimerText;
-
-    [Header("启动流程")]
-    [Tooltip("直接运行游戏场景时，是否自动播放 ReadyGo。SceneControl 加载的场景不受此开关影响，由 SceneControl 显式接管。")]
     public bool AutoReadyGoOnDirectSceneStart = true;
 
-    // true：当前场景是由 SceneControl 加载，并且 ReadyGo 的启动时机由 SceneControl 显式控制。
-    // false：没有 SceneControl 启动交接，视为直接运行当前游戏场景。
-    private bool startupOwnedBySceneControl = false;
+    public bool IsGameRunning { get; private set; }
+    public bool IsPreparing { get; private set; }
+    protected int leftScore, rightScore;
+    protected float gameTimer, questionTimer;
+    protected bool questionTimerRunning, questionResolved;
 
-    // 防止 SceneControl 在 Start 之前就完成交接时，Start 再次重复启动 ReadyGo。
-    private bool readyGoStarted = false;
+    private bool startupOwnedBySceneControl, readyGoStarted;
+    private Coroutine preparationRoutine, nextQuestionRoutine;
+    private Action externalVoiceFinished;
+    private int displayedLeftScore, displayedRightScore;
+    private int leftScoreTweenTarget, rightScoreTweenTarget;
+    private Tween leftScoreTween, rightScoreTween;
+    private int pendingGameplayActions;
+    private bool gameEndRequested;
+    private static int nextAnswerEffectOrder;
 
-    [Tooltip("出题间隔时间")]
-    protected float NextQuestionIntervalTimes = 2;
+    public ReadyGoPanel readyGoPanel;
+
+    [Header("0为答对特效，1为答错特效")]
+    public GameObject[] AnswerEff = new GameObject[2];
+
+    [Header("世界空间答题特效")]
+    public Camera AnswerEffectCamera;
+    public int AnswerEffectSortingOrder = 1000;
+    [Min(0.01f)] public float AnswerEffectLifetime = 1f;
 
     protected virtual void Awake()
     {
-        // 防止 AudioSource 勾选 Play On Awake 后，在 ReadyGo 前提前播放。
         StopBGM();
-
-        // “Again”现在只表示：玩家点击了【再来一次】，需要重新走 ReadyGo。
+        EndPanel.Preload();
+        questionTimer = QuestionDuration;
+        ConfigureQuestionTimerImage();
+        SetDisplayedLeftScore(leftScore);
+        SetDisplayedRightScore(rightScore);
         EventManager.AddListener(GenericEventEnumType.Generic, "Again", AgainCallback);
-
-        // “StartGame”只表示：3、2、1、Go 已经播放完成，可以正式开局。
-        EventManager.AddListener(GenericEventEnumType.Generic, "StartGame", StartGameCallback);
-
-        // 在 Awake 阶段立即完成启动所有权登记，不再通过“等几帧再猜启动来源”。
-        // SceneControl 在激活目标场景之前已经写入待启动场景，
-        // 因此这里可以同步、确定地知道 ReadyGo 应该由谁启动。
         startupOwnedBySceneControl = SceneControl.TryRegisterGameManagerForStartup(this);
-    }
-
-    /// <summary>
-    /// 玩家在结算页点击“再来一次”。
-    /// 不直接 RestartGame，而是重新进入 3、2、1、Go。
-    /// </summary>
-    private void AgainCallback(EventParamete parameteData)
-    {
-        if (IsGameRunning)
-            return;
-
-        StartReadyGo();
-    }
-
-    /// <summary>
-    /// ReadyGo 完成后才真正开始游戏。
-    /// </summary>
-    private void StartGameCallback(EventParamete parameteData)
-    {
-        // 允许下一次“再来一次”重新启动 ReadyGo。
-        readyGoStarted = false;
-        RestartGame();
     }
 
     protected virtual void Start()
     {
-        // ReadyGo 阶段游戏还没有正式开始，Update() 不会更新倒计时。
-        // 先把计时器重置并刷新一次 UI，让 ReadyGo 阶段直接显示完整游戏时间。
-        PrepareTimerForReadyGo();
-
-        // SceneControl 可能在场景激活完成后、Start 执行前就显式启动了 ReadyGo。
-        // 这种情况下 Start 只负责完成自身生命周期，不再重复启动。
-        if (readyGoStarted)
-            return;
-
-        if (startupOwnedBySceneControl)
-        {
-            Debug.Log(
-                $"[BaseGameManager] 已收到 SceneControl 启动交接，等待 SceneControl 显式启动 ReadyGo：{gameObject.scene.name}"
-            );
-            return;
-        }
-
-        // 没有收到 SceneControl 的启动交接，说明当前游戏场景是直接启动的。
-        // 不等待任何帧，Start 当帧直接进入 ReadyGo。
-        if (AutoReadyGoOnDirectSceneStart)
-        {
-            Debug.Log(
-                $"[BaseGameManager] 当前游戏场景为直接启动，立即进入 ReadyGo：{gameObject.scene.name}"
-            );
-
-            StartReadyGo();
-        }
+        RefreshTimerUI();
+        RefreshLocalizedScoreTexts();
+        if (readyGoStarted) return;
+        if (!startupOwnedBySceneControl && AutoReadyGoOnDirectSceneStart) StartPreparation();
     }
 
-    /// <summary>
-    /// SceneControl 完成转场后，通过这个方法显式把启动权交回 BaseGameManager。
-    /// 不使用事件猜测、不查找启动来源、不等待帧。
-    /// </summary>
+    private void AgainCallback(EventParamete data)
+    {
+        if (!IsGameRunning && !IsPreparing) StartPreparation();
+    }
+
     public void BeginReadyGoFromSceneControl()
     {
-        if (!startupOwnedBySceneControl)
-        {
-            Debug.LogWarning(
-                $"[BaseGameManager] 收到 SceneControl 的 ReadyGo 启动通知，但当前没有 SceneControl 启动交接：{gameObject.scene.name}",
-                this
-            );
-        }
-
         startupOwnedBySceneControl = false;
-        StartReadyGo();
+        StartPreparation();
     }
 
-    /// <summary>
-    /// ReadyGo 开始前统一准备计时 UI。
-    /// ReadyGo 本身不消耗游戏时间。
-    /// </summary>
-    private void PrepareTimerForReadyGo()
+    /// <summary>先生成题目/棋盘，再播准备语音；准备阶段不计时、不接收游戏输入。</summary>
+    public void StartPreparation()
     {
-        gameTimer = 0f;
-        UpdateTimerUI();
-    }
-
-    /// <summary>
-    /// ReadyGo 真正显示之前，允许具体游戏提前准备需要展示的游戏内容。
-    ///
-    /// 例如：
-    /// - 提前生成题目文本；
-    /// - 提前显示目标序列；
-    /// - 但不要在这里正式开始游戏计时。
-    ///
-    /// 默认什么都不做，避免影响其它游戏。
-    /// </summary>
-    protected virtual void PrepareGameForReadyGo()
-    {
-    }
-
-    /// <summary>
-    /// 统一启动 ReadyGo。UIPanel 不可用时直接开局，避免游戏卡死。
-    /// </summary>
-    private void StartReadyGo()
-    {
-        if (readyGoStarted)
-        {
-            Debug.LogWarning("[BaseGameManager] ReadyGo 已经启动，忽略重复请求。", this);
-            return;
-        }
-
-        if (IsGameRunning)
-        {
-            Debug.LogWarning("[BaseGameManager] 游戏已经开始，忽略 ReadyGo 请求。", this);
-            return;
-        }
-
-        readyGoStarted = true;
-
-        // ReadyGo 阶段绝对不播放游戏 BGM。
+        if (IsGameRunning || IsPreparing || readyGoStarted) return;
+        IsPreparing = true;
         StopBGM();
-
-        PrepareTimerForReadyGo();
-
-        // 先让具体游戏把 ReadyGo 阶段需要显示的内容准备好，
-        // 再真正打开 3、2、1、Go。
-        // 这样题目不会等到 ReadyGo 结束后的 InitGame() 才出现。
+        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+        nextQuestionRoutine = null;
+        if (readyGoPanel != null) readyGoPanel.CancelCountdown();
+        ResetRoundState();
+        // 准备阶段先创建题目并启动动画，随后同步播放 NPC 语音。
         PrepareGameForReadyGo();
+        if (preparationRoutine != null) StopCoroutine(preparationRoutine);
+        preparationRoutine = StartCoroutine(PreparationFlow());
+    }
 
-        UIPanel.Preload();
-
-        UIPanel panel = UIPanel.Instance;
-
-        if (panel != null)
+    private IEnumerator PreparationFlow()
+    {
+        if (WaitForExternalPreparationVoice)
         {
-            panel.ReadyGo();
+            bool done = false;
+            externalVoiceFinished = () => done = true;
+            yield return new WaitUntil(() => done || !IsPreparing);
+            externalVoiceFinished = null;
+            if (!IsPreparing) yield break;
         }
-        else
+        else if (PreparationVoiceSource != null && PreparationVoiceClip != null)
         {
-            Debug.LogError(
-                "[BaseGameManager] UIPanel.Instance 为空，无法播放 ReadyGo，直接启动游戏。",
-                this
-            );
-
-            readyGoStarted = false;
-            RestartGame();
+            PreparationVoiceSource.Stop();
+            PreparationVoiceSource.loop = false;
+            PreparationVoiceSource.clip = PreparationVoiceClip;
+            PreparationVoiceSource.Play();
+            // 音频暂停时 isPlaying 也会是 false，至少等待语音本身的时长。
+            yield return new WaitForSecondsRealtime(PreparationVoiceClip.length);
+            yield return new WaitWhile(() => PreparationVoiceSource != null && PreparationVoiceSource.isPlaying && IsPreparing);
+            if (!IsPreparing) yield break;
         }
+
+        // 语音结束时通知子类；本关的首题动画已在语音期间启动。
+        if (!IsPreparing) yield break;
+        OnPreparationVoiceEnded();
+
+        // 语音和首题动画都结束后，再留 1 秒才开始倒计时。
+        yield return new WaitUntil(() => !IsPreparing || IsPreparationVisualReady());
+        if (!IsPreparing) yield break;
+        yield return new WaitForSecondsRealtime(1f);
+        if (!IsPreparing) yield break;
+        readyGoStarted = true;
+        if (readyGoPanel != null && readyGoPanel.isActiveAndEnabled)
+        {
+            readyGoPanel.PlayCountdown(BeginActualGame);
+            yield break;
+        }
+
+        BeginActualGame();
+    }
+
+    public void NotifyPreparationVoiceFinished() { externalVoiceFinished?.Invoke(); }
+
+    protected virtual void PrepareGameForReadyGo() { }
+    protected virtual void OnPreparationVoiceEnded() { }
+    protected virtual bool IsPreparationVisualReady() { return true; }
+    protected abstract void InitGame();
+    protected virtual void CleanupGame() { }
+    protected virtual void CreateNextQuestion() { }
+
+    private void BeginActualGame()
+    {
+        if (IsGameRunning || !readyGoStarted) return;
+        IsPreparing = false;
+        readyGoStarted = false;
+        preparationRoutine = null;
+        ResetRoundState();
+        IsGameRunning = true;
+        InitGame();
+        RefreshTimerUI();
+        if (IsGameRunning && BGM != null) { BGM.Stop(); BGM.Play(); }
+    }
+
+    private void ResetRoundState()
+    {
+        KillScoreTweens();
+        pendingGameplayActions = 0;
+        gameEndRequested = false;
+        gameTimer = 0;
+        questionTimer = QuestionDuration;
+        questionTimerRunning = false;
+        questionResolved = false;
+        leftScore = rightScore = 0;
+        SetDisplayedLeftScore(leftScore);
+        SetDisplayedRightScore(rightScore);
+        RefreshTimerUI();
+        OnBattleScoreChanged(leftScore, rightScore);
     }
 
     protected virtual void Update()
     {
-        if (!IsGameRunning)
-            return;
-
-        // 更新游戏计时器
-        gameTimer += Time.deltaTime;
-
-        // 更新UI显示
-        UpdateTimerUI();
-
-        // 检查是否超时
-        if (gameTimer >= GameTime)
+        if (!IsGameRunning) return;
+        if (gameEndRequested) { RefreshTimerUI(); return; }
+        gameTimer = Mathf.Min(GameDuration, gameTimer + Time.deltaTime);
+        if (gameTimer >= GameDuration)
         {
+            GameEnd(DetermineResult());
+            RefreshTimerUI();
+            return;
+        }
+        if (questionTimerRunning && !questionResolved)
+        {
+            questionTimer -= Time.deltaTime;
+            if (questionTimer <= 0)
+            {
+                questionTimer = 0;
+                questionTimerRunning = false;
+                questionResolved = true;
+                OnQuestionTimeout();
+            }
+        }
+        RefreshTimerUI();
+    }
+
+    protected void StartQuestionTimer()
+    {
+        questionTimer = QuestionDuration;
+        questionTimerRunning = true;
+        questionResolved = false;
+        RefreshTimerUI();
+    }
+
+    protected void StopQuestionTimer() { questionTimerRunning = false; RefreshTimerUI(); }
+
+    /// <summary>开始一个必须完成的操作，例如答案飞行及其判定。</summary>
+    protected void BeginProtectedAction() { pendingGameplayActions++; }
+
+    /// <summary>所有已开始的操作结束后，才允许真正结算整局。</summary>
+    protected void EndProtectedAction()
+    {
+        pendingGameplayActions = Mathf.Max(0, pendingGameplayActions - 1);
+        if (pendingGameplayActions == 0 && gameEndRequested && IsGameRunning)
+        {
+            gameEndRequested = false;
             GameEnd(DetermineResult());
         }
     }
 
-    /// <summary>
-    /// 更新计时器UI显示
-    /// </summary>
-    protected virtual void UpdateTimerUI()
+    protected virtual void OnGameEndWaitingForActions() { }
+
+    /// <summary>传入 UI 屏幕坐标，生成 Z=0 的世界空间 SpriteRenderer 特效。</summary>
+    protected GameObject PlayAnswerEffect(bool correct, Vector2 screenPosition)
     {
+        int index = correct ? 0 : 1;
+        if (AnswerEff == null || index >= AnswerEff.Length || AnswerEff[index] == null) return null;
+        Camera camera = AnswerEffectCamera != null ? AnswerEffectCamera : Camera.main;
+        if (camera == null) { Debug.LogWarning("答题特效：没有找到带 MainCamera 标签的相机。", this); return null; }
+
+        Ray ray = camera.ScreenPointToRay(screenPosition);
+        Plane plane = new Plane(Vector3.forward, Vector3.zero);
+        if (!plane.Raycast(ray, out float distance)) return null;
+        Vector3 worldPosition = ray.GetPoint(distance);
+        worldPosition.z = 0f;
+
+        GameObject effect = LeanPool.Spawn(AnswerEff[index], worldPosition, Quaternion.identity, null);
+        if (effect == null) return null;
+        effect.transform.SetParent(null, true);
+        effect.transform.position = worldPosition;
+
+        int order = Mathf.Clamp(AnswerEffectSortingOrder, -20000, 10000) + (nextAnswerEffectOrder++ % 1000) * 16;
+        SpriteRenderer[] renderers = effect.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++) renderers[i].sortingOrder = Mathf.Clamp(order + i, -32768, 32767);
+        if (renderers.Length == 0) Debug.LogWarning("答题特效预制体没有 SpriteRenderer。", effect);
+
+        PlaySprite player = effect.GetComponentInChildren<PlaySprite>(true);
+        if (player != null) { player.Reset(); player.Play(); }
+        LeanPool.Despawn(effect, Mathf.Max(0.01f, AnswerEffectLifetime));
+        return effect;
+    }
+
+    protected void ScheduleNextQuestion(Action action)
+    {
+        if (gameEndRequested) return;
+        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+        nextQuestionRoutine = StartCoroutine(NextQuestionFlow(action));
+    }
+
+    private IEnumerator NextQuestionFlow(Action action)
+    {
+        StopQuestionTimer();
+        yield return new WaitForSeconds(NextQuestionInterval);
+        yield return new WaitUntil(() => pendingGameplayActions == 0 || !IsGameRunning);
+        nextQuestionRoutine = null;
+        if (IsGameRunning && !gameEndRequested) action?.Invoke();
+    }
+
+    protected virtual void OnQuestionTimeout() { ScheduleNextQuestion(CreateNextQuestion); }
+
+    protected virtual void RefreshTimerUI()
+    {
+        if (QuestionTimerImage != null)
+            QuestionTimerImage.fillAmount = Mathf.Clamp01(questionTimer / Mathf.Max(0.01f, QuestionDuration));
+
         if (GameTimerText != null)
         {
-            float remainingTime = Mathf.Max(0f, GameTime - gameTimer);
-
-            // 使用 Ceil，避免游戏刚开始第一帧就从 01:00 跳成 00:59。
-            int totalSeconds = Mathf.CeilToInt(remainingTime);
-            int minutes = totalSeconds / 60;
-            int seconds = totalSeconds % 60;
-
-            GameTimerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
-        }
-    }
-
-    /// <summary>
-    /// 重新开始游戏（由 UIPanel 的 ReadyGo 完成后或 Again 按钮触发）
-    /// </summary>
-    public virtual void RestartGame()
-    {
-        IsGameRunning = true;
-        gameTimer = 0f;
-        leftScore = 0;
-        rightScore = 0;
-
-        // ReadyGo 结束正式开局时再次刷新为完整时间，
-        // 保证开局第一帧显示正确。
-        UpdateTimerUI();
-
-        // 清理场景中的旧对象
-        CleanupGame();
-
-        // 初始化游戏
-        InitGame();
-
-        // 只有 ReadyGo 已结束并且游戏确实成功进入运行状态后才播放 BGM。
-        if (IsGameRunning)
-        {
-            PlayBGM();
-        }
-
-        Debug.Log("[BaseGameManager] 游戏开始");
-    }
-
-    /// <summary>
-    /// 游戏初始化（子类实现具体逻辑）
-    /// </summary>
-    protected abstract void InitGame();
-
-    /// <summary>
-    /// 清理游戏场景（子类实现具体逻辑）
-    /// </summary>
-    protected virtual void CleanupGame()
-    {
-        // 子类可以重写此方法来清理游戏对象
-    }
-
-    /// <summary>
-    /// 游戏结束
-    /// </summary>
-    public virtual void GameEnd(ResultType result)
-    {
-        if (!IsGameRunning)
-            return;
-
-        IsGameRunning = false;
-
-        // 进入结算页面前立即停止游戏 BGM。
-        StopBGM();
-
-        // 显示结算页面
-        if (UIPanel.Instance != null)
-        {
-            UIPanel.Instance.ShowResult(
-                result,
-                leftScore,
-                rightScore
-            );
-        }
-        else
-        {
-            Debug.LogError("[BaseGameManager] UIPanel.Instance 为空，无法显示结算页面");
-        }
-    }
-
-    /// <summary>
-    /// 判定游戏结果（子类可以重写）
-    /// </summary>
-    protected virtual ResultType DetermineResult()
-    {
-        if (leftScore > rightScore)
-        {
-            return ResultType.左边胜利;
-        }
-        else if (leftScore == rightScore)
-        {
-            return ResultType.平局;
-        }
-        else
-        {
-            return ResultType.右边胜利;
+            int s = Mathf.CeilToInt(Mathf.Max(0, GameDuration - gameTimer));
+            GameTimerText.text = $"{s / 60:00}:{s % 60:00}";
         }
     }
 
     public virtual void AddLeftScore(int points)
     {
-        if (!IsGameRunning)
-            return;
-
-        leftScore = Mathf.Max(0, leftScore + points);
+        if (!IsGameRunning) return;
+        leftScore = (int)Math.Min(int.MaxValue, Math.Max(0L, (long)leftScore + points));
+        RefreshLeftScoreDisplay(true);
         OnBattleScoreChanged(leftScore, rightScore);
     }
 
     public virtual void AddRightScore(int points)
     {
-        if (!IsGameRunning)
-            return;
-
-        rightScore = Mathf.Max(0, rightScore + points);
+        if (!IsGameRunning) return;
+        rightScore = (int)Math.Min(int.MaxValue, Math.Max(0L, (long)rightScore + points));
+        RefreshRightScoreDisplay(true);
         OnBattleScoreChanged(leftScore, rightScore);
     }
 
-    public virtual void SetBattleScores(int left, int right)
+    public void SetBattleScores(int left, int right)
     {
         leftScore = Mathf.Max(0, left);
         rightScore = Mathf.Max(0, right);
+        RefreshLeftScoreDisplay(IsGameRunning);
+        RefreshRightScoreDisplay(IsGameRunning);
         OnBattleScoreChanged(leftScore, rightScore);
     }
 
-    public virtual void GameEndBattle(int left, int right)
+    private void ConfigureQuestionTimerImage()
     {
-        SetBattleScores(left, right);
-        GameEnd(DetermineBattleResult());
+        if (QuestionTimerImage == null) return;
+        QuestionTimerImage.type = Image.Type.Filled;
+        QuestionTimerImage.fillMethod = Image.FillMethod.Horizontal;
+        QuestionTimerImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+        QuestionTimerImage.fillAmount = 1f;
     }
 
-    protected virtual ResultType DetermineBattleResult()
+    private void SetDisplayedLeftScore(int value)
     {
-        if (leftScore > rightScore)
-            return ResultType.左边胜利;
+        displayedLeftScore = value;
+        if (leftScoreText != null) leftScoreText.text = FormatScore(value);
+    }
 
-        if (leftScore < rightScore)
-            return ResultType.右边胜利;
+    private void SetDisplayedRightScore(int value)
+    {
+        displayedRightScore = value;
+        if (rightScoreText != null) rightScoreText.text = FormatScore(value);
+    }
 
+    private static string FormatScore(int value)
+    {
+        string unit = LanguageManger.Instance != null ? LanguageManger.Instance.GetValue("分") : "分";
+        return value + " " + (string.IsNullOrWhiteSpace(unit) ? "分" : unit.Trim());
+    }
+
+    public void RefreshLocalizedScoreTexts()
+    {
+        SetDisplayedLeftScore(displayedLeftScore);
+        SetDisplayedRightScore(displayedRightScore);
+    }
+
+    private void RefreshLeftScoreDisplay(bool animate)
+    {
+        if (animate && leftScoreTween != null && leftScoreTweenTarget == leftScore) return;
+        if (leftScoreTween != null) leftScoreTween.Kill();
+        leftScoreTween = null;
+        leftScoreTweenTarget = leftScore;
+        if (!animate || leftScoreText == null || ScoreRollDuration <= 0f || displayedLeftScore == leftScore)
+        {
+            SetDisplayedLeftScore(leftScore);
+            return;
+        }
+
+        leftScoreTween = DOTween.To(() => displayedLeftScore, SetDisplayedLeftScore, leftScore, ScoreRollDuration).SetEase(ScoreRollEase).OnComplete(() => { SetDisplayedLeftScore(leftScore); leftScoreTween = null; });
+        leftScoreTween.Play();
+    }
+
+    private void RefreshRightScoreDisplay(bool animate)
+    {
+        if (animate && rightScoreTween != null && rightScoreTweenTarget == rightScore) return;
+        if (rightScoreTween != null) rightScoreTween.Kill();
+        rightScoreTween = null;
+        rightScoreTweenTarget = rightScore;
+        if (!animate || rightScoreText == null || ScoreRollDuration <= 0f || displayedRightScore == rightScore)
+        {
+            SetDisplayedRightScore(rightScore);
+            return;
+        }
+
+        rightScoreTween = DOTween.To(() => displayedRightScore, SetDisplayedRightScore, rightScore, ScoreRollDuration).SetEase(ScoreRollEase).OnComplete(() => { SetDisplayedRightScore(rightScore); rightScoreTween = null; });
+        rightScoreTween.Play();
+    }
+
+    private void KillScoreTweens()
+    {
+        if (leftScoreTween != null) leftScoreTween.Kill();
+        if (rightScoreTween != null) rightScoreTween.Kill();
+        leftScoreTween = null;
+        rightScoreTween = null;
+    }
+
+    protected virtual void OnBattleScoreChanged(int left, int right) { }
+    public int GetLeftScore() => leftScore;
+    public int GetRightScore() => rightScore;
+    public float GetRemainingTime() => Mathf.Max(0, GameDuration - gameTimer);
+
+    protected virtual ResultType DetermineResult()
+    {
+        if (leftScore > rightScore) return ResultType.左边胜利;
+        if (rightScore > leftScore) return ResultType.右边胜利;
         return ResultType.平局;
     }
 
-    /// <summary>
-    /// 分数改变时的回调（子类可以重写）
-    /// </summary>
-    protected virtual void OnScoreChanged(int newScore)
+    public virtual void GameEnd(ResultType result)
     {
-        // 子类可以在这里更新分数UI
-    }
-
-    protected virtual void OnBattleScoreChanged(int left, int right)
-    {
-    }
-
-    public int GetLeftScore()
-    {
-        return leftScore;
-    }
-
-    public int GetRightScore()
-    {
-        return rightScore;
-    }
-
-    /// <summary>
-    /// 获取剩余时间
-    /// </summary>
-    public float GetRemainingTime()
-    {
-        return Mathf.Max(0f, GameTime - gameTimer);
-    }
-
-    /// <summary>
-    /// 正式游戏开始后播放 BGM。
-    /// 每一局都从头播放。
-    /// </summary>
-    private void PlayBGM()
-    {
-        if (BGM == null)
+        if (!IsGameRunning) return;
+        if (pendingGameplayActions > 0)
+        {
+            if (!gameEndRequested) OnGameEndWaitingForActions();
+            gameEndRequested = true;
+            StopQuestionTimer();
             return;
-
-        BGM.Stop();
-        BGM.Play();
+        }
+        gameEndRequested = false;
+        IsGameRunning = false;
+        StopQuestionTimer();
+        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+        nextQuestionRoutine = null;
+        CleanupGame();
+        if (BGM != null) BGM.Stop();
+        if (EndPanel.Instance != null) EndPanel.Instance.ShowResult(result, leftScore, rightScore);
     }
 
-    /// <summary>
-    /// ReadyGo、结算、销毁阶段统一停止 BGM。
-    /// </summary>
+    public void GameEndBattle(int left, int right) { SetBattleScores(left, right); GameEnd(DetermineResult()); }
+    public void ForceEndGame() { if (IsGameRunning) GameEnd(DetermineResult()); }
+
+    /// <summary>安全停止背景音乐，供 Awake 和准备流程调用。</summary>
     private void StopBGM()
     {
-        if (BGM == null)
-            return;
-
-        BGM.Stop();
+        if (BGM != null)
+            BGM.Stop();
     }
 
     public virtual void CancelForSceneExit()
     {
-        IsGameRunning = false;
+        IsGameRunning = IsPreparing = false;
         readyGoStarted = false;
-        StopBGM();
-    }
-
-    /// <summary>
-    /// 立即结束游戏（用于特殊情况）
-    /// </summary>
-    public void ForceEndGame()
-    {
-        if (IsGameRunning)
-        {
-            GameEnd(DetermineResult());
-        }
+        pendingGameplayActions = 0;
+        gameEndRequested = false;
+        KillScoreTweens();
+        if (preparationRoutine != null) StopCoroutine(preparationRoutine);
+        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+        preparationRoutine = null;
+        nextQuestionRoutine = null;
+        externalVoiceFinished = null;
+        if (readyGoPanel != null) readyGoPanel.CancelCountdown();
+        CleanupGame();
+        if (BGM != null) BGM.Stop();
+        if (PreparationVoiceSource != null) PreparationVoiceSource.Stop();
     }
 
     protected virtual void OnDestroy()
     {
-        StopBGM();
-
-        // 如果对象在 SceneControl 交接期间被销毁，主动注销，避免 SceneControl 保留失效引用。
+        CancelForSceneExit();
         SceneControl.UnregisterGameManagerForStartup(this);
-
         EventManager.RemoveListener(GenericEventEnumType.Generic, "Again", AgainCallback);
-        EventManager.RemoveListener(GenericEventEnumType.Generic, "StartGame", StartGameCallback);
     }
 }

@@ -85,6 +85,7 @@ GameObject:
   - component: {fileID: 6755128662448575282}
   - component: {fileID: 3297063694540567014}
   - component: {fileID: 4692906169970509840}
+  - component: {fileID: 6984306340205517952}
   m_Layer: 5
   m_Name: "\u5C04\u51FB\u6B21\u6570"
   m_TagString: Untagged
@@ -231,3 +232,16 @@ MonoBehaviour:
   - {fileID: 0}
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!114 &6984306340205517952
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7345068851843022953}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e792e59b43b16d144a420852d5f18665, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  text: {fileID: 0}

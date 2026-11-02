@@ -3,11 +3,13 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
+using LanguageSetting;
 
 /// <summary>
 /// 通过 ClickManager -> BaseTouch.OnTouch 触发的 UGUI 按钮。
-/// 支持普通/按下/禁用 Sprite、点击间隔、按下持续时间以及 UnityEvent 注册。
-/// 兼容 Unity 2019.4。
+/// 每个按钮独立配置中英文的普通/按下/禁用图片，初始化时选择一次语言。
+/// 支持点击间隔、按下持续时间以及 UnityEvent 注册。
+/// 兼容 Unity 6 LTS 及旧版 UGUI。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(RectTransform))]
@@ -29,14 +31,26 @@ public class TouchUIButton : BaseTouch
     [Tooltip("用于切换 Sprite 的 Image。不设置时自动查找当前物体上的 Image。")]
     [SerializeField] private Image targetImage;
 
-    [Tooltip("正常状态 Sprite。不设置时使用 Awake 时 Image 当前的 Sprite。")]
+    // 保留这三个旧字段名，Unity 已绑定的中文图片不会丢失。
+    [Header("中文按钮图片（原字段）")]
+    [Tooltip("中文普通图；不填时使用 Image 初始图片。")]
     [SerializeField] private Sprite normalSprite;
 
-    [Tooltip("按下状态 Sprite。不设置时按下期间保持 normalSprite。")]
+    [Tooltip("中文按下图；不填时使用当前语言的普通图。")]
     [SerializeField] private Sprite pressedSprite;
 
-    [Tooltip("不可交互状态 Sprite。不设置时继续显示 normalSprite。")]
+    [Tooltip("中文禁用图；不填时使用当前语言的普通图。")]
     [SerializeField] private Sprite disabledSprite;
+
+    [Header("英文按钮图片")]
+    [Tooltip("英文普通图；不填时回退中文普通图。")]
+    [SerializeField] private Sprite englishNormalSprite;
+
+    [Tooltip("英文按下图；不填时保持英文普通图，不会切回中文。")]
+    [SerializeField] private Sprite englishPressedSprite;
+
+    [Tooltip("英文禁用图；不填时保持英文普通图。")]
+    [SerializeField] private Sprite englishDisabledSprite;
 
     [Header("点击设置")]
     [Min(0f)]
@@ -58,6 +72,9 @@ public class TouchUIButton : BaseTouch
 
     private float nextAllowedClickTime;
     private Coroutine pressedCoroutine;
+    private Sprite currentNormalSprite;
+    private Sprite currentPressedSprite;
+    private Sprite currentDisabledSprite;
 
     // 按下视觉是否正在保持中。
     // 保持期间即使 interactable 状态发生变化，也不立即覆盖 Pressed Sprite。
@@ -116,23 +133,13 @@ public class TouchUIButton : BaseTouch
     protected override void Awake()
     {
         base.Awake();
-
-        if (targetImage == null)
-        {
-            targetImage = GetComponent<Image>();
-        }
-
-        if (targetImage != null && normalSprite == null)
-        {
-            normalSprite = targetImage.sprite;
-        }
-
-        RefreshVisual();
+        if (targetImage == null) targetImage = GetComponent<Image>();
+        if (normalSprite == null && targetImage != null) normalSprite = targetImage.sprite;
+        RefreshLanguage();
     }
 
     private void OnEnable()
     {
-        // UI 被重新显示时允许立即点击，避免继承上一次隐藏前的冷却时间。
         nextAllowedClickTime = 0f;
         RefreshVisual();
     }
@@ -141,11 +148,27 @@ public class TouchUIButton : BaseTouch
     {
         StopPressedCoroutine();
         isPressedVisualPlaying = false;
+        if (resetVisualOnDisable) RefreshVisual();
+    }
 
-        if (resetVisualOnDisable)
-        {
-            RefreshVisual();
-        }
+    /// <summary>Awake 时调用一次；如确需运行时切换，可主动调用。</summary>
+    public void RefreshLanguage()
+    {
+        if (targetImage == null) targetImage = GetComponent<Image>();
+        bool english = IsEnglishLanguage();
+        currentNormalSprite = english && englishNormalSprite != null ? englishNormalSprite : normalSprite;
+        if (currentNormalSprite == null && targetImage != null) currentNormalSprite = targetImage.sprite;
+        currentPressedSprite = english ? englishPressedSprite : pressedSprite;
+        currentDisabledSprite = english ? englishDisabledSprite : disabledSprite;
+        if (currentPressedSprite == null) currentPressedSprite = currentNormalSprite;
+        if (currentDisabledSprite == null) currentDisabledSprite = currentNormalSprite;
+        if (!isPressedVisualPlaying) RefreshVisual();
+    }
+
+    private static bool IsEnglishLanguage()
+    {
+        LanguageManger manager = LanguageManger.Instance;
+        return manager != null && manager.GetLanguageType() == LanguageType.英文;
     }
 
     public override void OnTouch(Vector3 point)
@@ -164,7 +187,6 @@ public class TouchUIButton : BaseTouch
 
         nextAllowedClickTime = now + Mathf.Max(0f, clickInterval);
         LastTouchWorldPoint = point;
-
         PlayPressedVisual();
 
         if (m_OnClick != null)
@@ -237,13 +259,7 @@ public class TouchUIButton : BaseTouch
 
         isPressedVisualPlaying = true;
 
-        if (targetImage != null)
-        {
-            targetImage.sprite =
-                pressedSprite != null
-                    ? pressedSprite
-                    : normalSprite;
-        }
+        if (targetImage != null) targetImage.sprite = currentPressedSprite;
 
         if (pressedDuration <= 0f)
         {
@@ -257,18 +273,13 @@ public class TouchUIButton : BaseTouch
 
     protected virtual void RefreshVisual()
     {
-        if (targetImage == null)
-        {
-            return;
-        }
-
+        if (targetImage == null) return;
         if (!m_Interactable)
         {
-            targetImage.sprite = disabledSprite != null ? disabledSprite : normalSprite;
+            targetImage.sprite = currentDisabledSprite;
             return;
         }
-
-        targetImage.sprite = normalSprite;
+        targetImage.sprite = currentNormalSprite;
     }
 
     private IEnumerator RestoreVisualRoutine()
@@ -276,8 +287,7 @@ public class TouchUIButton : BaseTouch
         // Pressed Sprite 固定保持 pressedDuration。
         // 在这段时间里，按钮功能即使把 interactable 改成 false，
         // 也不会提前覆盖 Pressed Sprite。
-        yield return new WaitForSecondsRealtime(
-            Mathf.Max(0f, pressedDuration));
+        yield return new WaitForSecondsRealtime(Mathf.Max(0f, pressedDuration));
 
         pressedCoroutine = null;
         isPressedVisualPlaying = false;

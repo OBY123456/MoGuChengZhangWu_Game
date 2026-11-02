@@ -3,14 +3,17 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using LanguageSetting;
+using TMPro;
 
 public class SetEN : MonoBehaviour
 {
-    public Text text;
+    private Text text;
+    private TextMeshProUGUI textMesh;
 
     private void Awake()
     {
         text = GetComponent<Text>();
+        textMesh = GetComponent<TextMeshProUGUI>();
     }
 
     // Start is called before the first frame update
@@ -19,6 +22,11 @@ public class SetEN : MonoBehaviour
         if(text != null)
         {
             text.text = LanguageManger.Instance.GetValue(text.text);
+        }
+
+        if(textMesh != null)
+        {
+            textMesh.text = LanguageManger.Instance.GetValue(textMesh.text);
         }
     }
 }

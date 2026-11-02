@@ -69,7 +69,7 @@ public class SceneControl : MonoBehaviour
     {
         if (isLoadingScene) return;
         StopCurrentGameForSceneExit();
-        UIPanel.CancelForSceneExit();
+        EndPanel.CancelForSceneExit();
         LoadSceneSync(HomeSceneName);
     }
 

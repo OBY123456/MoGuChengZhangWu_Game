@@ -5,11 +5,12 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 播放序列帧，挂在Image组件上
+/// 播放序列帧，可挂在 Image 或 SpriteRenderer 上
 /// </summary>
 public class PlaySprite : MonoBehaviour
 {
     private Image ImageSource;
+    private SpriteRenderer SpriteSource;
     private int mCurFrame = 0;
     private float mDelta = 0;
 
@@ -51,6 +52,8 @@ public class PlaySprite : MonoBehaviour
     void Awake()
     {
         ImageSource = GetComponent<Image>();
+        SpriteSource = GetComponent<SpriteRenderer>();
+        if (SpriteSource == null) SpriteSource = GetComponentInChildren<SpriteRenderer>(true);
         canvasGroup = GetComponent<CanvasGroup>();
     }
 
@@ -63,7 +66,11 @@ public class PlaySprite : MonoBehaviour
     private void SetSprite(int idx)
     {
         if(SpriteFrames != null && FrameCount > 0)
-        ImageSource.sprite = SpriteFrames[idx];
+        {
+            int frame = Mathf.Clamp(idx, 0, FrameCount - 1);
+            if (ImageSource != null) ImageSource.sprite = SpriteFrames[frame];
+            if (SpriteSource != null) SpriteSource.sprite = SpriteFrames[frame];
+        }
     }
 
     private void OnEnable()
@@ -119,6 +126,7 @@ public class PlaySprite : MonoBehaviour
     {
         if (!IsPlaying)
         {
+            if (SpriteSource != null) SpriteSource.enabled = true;
             LoopTimes = 0;
             IsPlaying = true;
             SetSprite(0);
@@ -133,6 +141,7 @@ public class PlaySprite : MonoBehaviour
     {
         if(!IsPlaying)
         {
+            if (SpriteSource != null) SpriteSource.enabled = true;
             SetSprite(0);
             mDelta = 0;
             mCurFrame = 0;
@@ -148,6 +157,7 @@ public class PlaySprite : MonoBehaviour
         if(IsPlaying)
         {
             IsPlaying = false;
+            if (SpriteSource != null) SpriteSource.enabled = false;
             if(canvasGroup != null)
             canvasGroup.alpha = 0;
             SetSprite(0);
@@ -160,6 +170,7 @@ public class PlaySprite : MonoBehaviour
     public void Reset()
     {
         IsPlaying = false;
+        if (SpriteSource != null) SpriteSource.enabled = false;
         if(canvasGroup != null)
         canvasGroup.alpha = 0;
         SetSprite(0);
