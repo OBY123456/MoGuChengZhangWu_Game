@@ -46,10 +46,10 @@ public class TouchUIButton : BaseTouch
     [Tooltip("英文普通图；不填时回退中文普通图。")]
     [SerializeField] private Sprite englishNormalSprite;
 
-    [Tooltip("英文按下图；不填时保持英文普通图，不会切回中文。")]
+    [Tooltip("英文按下图；不填时回退中文按下图，中文按下图也未填时使用当前普通图。")]
     [SerializeField] private Sprite englishPressedSprite;
 
-    [Tooltip("英文禁用图；不填时保持英文普通图。")]
+    [Tooltip("英文禁用图；不填时回退中文禁用图，中文禁用图也未填时使用当前普通图。")]
     [SerializeField] private Sprite englishDisabledSprite;
 
     [Header("点击设置")]
@@ -158,8 +158,8 @@ public class TouchUIButton : BaseTouch
         bool english = IsEnglishLanguage();
         currentNormalSprite = english && englishNormalSprite != null ? englishNormalSprite : normalSprite;
         if (currentNormalSprite == null && targetImage != null) currentNormalSprite = targetImage.sprite;
-        currentPressedSprite = english ? englishPressedSprite : pressedSprite;
-        currentDisabledSprite = english ? englishDisabledSprite : disabledSprite;
+        currentPressedSprite = english && englishPressedSprite != null ? englishPressedSprite : pressedSprite;
+        currentDisabledSprite = english && englishDisabledSprite != null ? englishDisabledSprite : disabledSprite;
         if (currentPressedSprite == null) currentPressedSprite = currentNormalSprite;
         if (currentDisabledSprite == null) currentDisabledSprite = currentNormalSprite;
         if (!isPressedVisualPlaying) RefreshVisual();

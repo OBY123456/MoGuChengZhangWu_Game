@@ -473,7 +473,7 @@ GameObject:
   - component: {fileID: 8362875640708362150}
   - component: {fileID: 1238763734159796771}
   m_Layer: 5
-  m_Name: XFTPanel
+  m_Name: XHTPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -532,7 +532,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: ad136098e6ee71c40be755cb5d055ad5, type: 3}
+  m_Sprite: {fileID: 21300000, guid: e1b9f00fc0105564685c8a029afbf173, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2475,7 +2475,7 @@ PrefabInstance:
         type: 3}
       propertyPath: m_audioClip
       value: 
-      objectReference: {fileID: 8300000, guid: 71f56356d91d4924c9c7830ad44bc4cd, type: 3}
+      objectReference: {fileID: 8300000, guid: b0051425f06397b49898f755607f8626, type: 3}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c04cb20575a6f474a8b0cfec21bc0fad, type: 3}
 --- !u!82 &38552603752797207 stripped

@@ -72,7 +72,7 @@ namespace Lean.Pool
 				// Try and spawn a clone from this pool
 				var clone = default(GameObject);
 
-				if (pool.TrySpawn(position, rotation, parent, worldPositionStays, ref clone) == true)
+				if (pool != null && !pool.IsDestroying && pool.TrySpawn(position, rotation, parent, worldPositionStays, ref clone) == true)
 				{
 					// Clone already registered?
 					if (Links.Remove(clone) == true)
@@ -106,13 +106,27 @@ namespace Lean.Pool
 		/// <summary>This will despawn all pool clones.</summary>
 		public static void DespawnAll()
 		{
-			foreach (var instance in LeanGameObjectPool.Instances)
-			{
-				instance.DespawnAll();
-			}
-
-			Links.Clear();
+            // 回收通知可能销毁某个池，用快照避免枚举期间Instances被修改。
+            List<LeanGameObjectPool> pools = new List<LeanGameObjectPool>(LeanGameObjectPool.Instances);
+            for (int i = 0; i < pools.Count; i++)
+            {
+                LeanGameObjectPool pool = pools[i];
+                if (pool != null && !pool.IsDestroying) pool.DespawnAll();
+            }
+            Links.Clear();
 		}
+
+
+        // 由池的OnDestroy调用，只移除属于该池的关联，保留其他仍然有效的池。
+        internal static void RemovePoolLinks(LeanGameObjectPool pool)
+        {
+            List<GameObject> staleClones = new List<GameObject>();
+            foreach (KeyValuePair<GameObject, LeanGameObjectPool> pair in Links)
+            {
+                if (System.Object.ReferenceEquals(pair.Value, pool)) staleClones.Add(pair.Key);
+            }
+            for (int i = 0; i < staleClones.Count; i++) Links.Remove(staleClones[i]);
+        }
 
 		/// <summary>This allows you to despawn a clone via Component, with optional delay.</summary>
 		public static void Despawn(Component clone, float delay = 0.0f)
@@ -123,37 +137,27 @@ namespace Lean.Pool
 		/// <summary>This allows you to despawn a clone via GameObject, with optional delay.</summary>
 		public static void Despawn(GameObject clone, float delay = 0.0f)
 		{
-			if (clone != null)
-			{
-				var pool = default(LeanGameObjectPool);
+            // ReferenceEquals只判断托管引用；Unity判空还会识别已销毁的原生对象。
+            if (System.Object.ReferenceEquals(clone, null)) return;
+            LeanGameObjectPool pool;
+            bool linked = Links.TryGetValue(clone, out pool);
+            Links.Remove(clone);
+            if (clone == null) return;
 
-				// Try and find the pool associated with this clone
-				if (Links.TryGetValue(clone, out pool) == true)
-				{
-					// Remove the association
-					Links.Remove(clone);
+            // 字典里即使还能查到pool，它也可能已经随停止播放或场景卸载而销毁。
+            if (linked && pool != null && !pool.IsDestroying)
+            {
+                pool.Despawn(clone, delay);
+                return;
+            }
+            if (LeanGameObjectPool.TryFindPoolByClone(clone, ref pool) && pool != null && !pool.IsDestroying)
+            {
+                pool.Despawn(clone, delay);
+                return;
+            }
 
-					pool.Despawn(clone, delay);
-				}
-				else
-				{
-					if (LeanGameObjectPool.TryFindPoolByClone(clone, ref pool) == true)
-					{
-						pool.Despawn(clone, delay);
-					}
-					else
-					{
-						//Debug.LogWarning("You're attempting to despawn a gameObject that wasn't spawned from this pool", clone);
-
-						// Fall back to normal destroying
-						Object.Destroy(clone);
-					}
-				}
-			}
-			else
-			{
-				//Debug.LogWarning("You're attempting to despawn a null gameObject", clone);
-			}
+            // 没有有效池时，运行中沿用普通销毁；退出到编辑模式时交由Unity完成场景清理。
+            if (clone != null && Application.isPlaying) Object.Destroy(clone);
 		}
 	}
 }

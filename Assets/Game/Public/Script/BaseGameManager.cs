@@ -19,7 +19,7 @@ public abstract class BaseGameManager : MonoBehaviour
     public bool WaitForExternalPreparationVoice;
 
     [Header("时间")]
-    [Min(1)] private float GameDuration = 15f;
+    [Min(1)] private float GameDuration = 60f;
     [Min(1)] public float QuestionDuration = 10f;
     [Min(0)] public float NextQuestionInterval = 1f;
 

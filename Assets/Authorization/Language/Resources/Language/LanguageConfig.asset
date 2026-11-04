@@ -156,14 +156,14 @@ MonoBehaviour:
     Value: Repair Core
   - Key: "\u5BFB\u6D77\u56FE"
     Value: Sea Map
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
+  - Key: "\u8FF7\u5BAB\u822A"
+    Value: Maze Sail
+  - Key: "\u6797\u95F4\u8DEF"
+    Value: Forest Trail
+  - Key: "\u5BFC\u822A\u9635"
+    Value: Waypoint
+  - Key: "\u56DE\u5BB6\u8DEF"
+    Value: Homeward
   - Key: 
     Value: 
   CopyConfig: {fileID: 0}
