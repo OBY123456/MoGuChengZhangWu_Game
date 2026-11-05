@@ -19,7 +19,7 @@ public abstract class BaseGameManager : MonoBehaviour
     public bool WaitForExternalPreparationVoice;
 
     [Header("时间")]
-    [Min(1)] private float GameDuration = 60f;
+    [Min(1)] private float GameDuration = 15f;
     [Min(1)] public float QuestionDuration = 10f;
     [Min(0)] public float NextQuestionInterval = 1f;
 
@@ -48,6 +48,7 @@ public abstract class BaseGameManager : MonoBehaviour
     private int displayedLeftScore, displayedRightScore;
     private int leftScoreTweenTarget, rightScoreTweenTarget;
     private Tween leftScoreTween, rightScoreTween;
+    protected bool IsScoreRolling => (leftScoreTween != null && leftScoreTween.IsActive()) || (rightScoreTween != null && rightScoreTween.IsActive());
     private int pendingGameplayActions;
     private bool gameEndRequested;
     private static int nextAnswerEffectOrder;

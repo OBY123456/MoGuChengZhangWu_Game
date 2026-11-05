@@ -164,6 +164,66 @@ MonoBehaviour:
     Value: Waypoint
   - Key: "\u56DE\u5BB6\u8DEF"
     Value: Homeward
+  - Key: "\u8E29\u91D1\u5E01"
+    Value: Coin Stomp
+  - Key: "\u58F0\u97F3\u6797"
+    Value: Echo Woods
+  - Key: "\u80FD\u6E90\u4ED3"
+    Value: Energy Bay
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
+  - Key: 
+    Value: 
   - Key: 
     Value: 
   CopyConfig: {fileID: 0}
