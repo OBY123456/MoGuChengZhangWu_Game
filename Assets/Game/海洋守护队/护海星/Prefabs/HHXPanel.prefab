@@ -192,7 +192,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 37, y: -50}
-  m_SizeDelta: {x: 1040, y: 662}
+  m_SizeDelta: {x: 1040, y: 650}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4702346021456359144
 CanvasRenderer:
@@ -500,6 +500,11 @@ PrefabInstance:
       propertyPath: m_audioClip
       value: 
       objectReference: {fileID: 8300000, guid: 4d29bec0a809e964cb1cd5d86f4e5fd3, type: 3}
+    - target: {fileID: 8099596493785180903, guid: c04cb20575a6f474a8b0cfec21bc0fad,
+        type: 3}
+      propertyPath: m_Volume
+      value: 0.5
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c04cb20575a6f474a8b0cfec21bc0fad, type: 3}
 --- !u!82 &9042955354743796496 stripped

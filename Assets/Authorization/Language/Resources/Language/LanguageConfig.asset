@@ -128,8 +128,6 @@ MonoBehaviour:
     Value: Level 4
   - Key: "\u7B2C\u4E94\u5173"
     Value: Level 5
-  - Key: "\u85CF\u5B9D\u56FE"
-    Value: Treasure Map
   - Key: "\u5206"
     Value: PT
   - Key: "\u672C\u5C40\u7ED3\u7B97"
@@ -150,6 +148,8 @@ MonoBehaviour:
     Value: Next Level
   - Key: "\u65D7\u9F13\u76F8\u5F53\uFF0C\u518D\u6765\u4E00\u5C40\uFF01"
     Value: Evenly Matched!Play again!
+  - Key: "\u85CF\u5B9D\u56FE"
+    Value: Treasure Map
   - Key: "\u5FBD\u7AE0\u56FE"
     Value: Badge
   - Key: "\u4FEE\u590D\u6838"
@@ -170,24 +170,24 @@ MonoBehaviour:
     Value: Echo Woods
   - Key: "\u80FD\u6E90\u4ED3"
     Value: Energy Bay
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
+  - Key: "\u62A4\u6D77\u661F"
+    Value: Star Ward
+  - Key: "\u5DE7\u7B97\u6E7E"
+    Value: Trick Bay
+  - Key: "\u8C1C\u6570\u6797"
+    Value: Math Woods
+  - Key: "\u6570\u5B66\u4ED3"
+    Value: Math Hold
+  - Key: "\u63A2\u6570\u6D77"
+    Value: Math Sea
+  - Key: "\u8BB0\u5FC6\u9635"
+    Value: Memoria
+  - Key: "\u591C\u5F71\u9635"
+    Value: Night Array
+  - Key: "\u8BB0\u5FC6\u4ED3"
+    Value: Memory Hold
+  - Key: "\u8BB0\u5FC6\u6F6E"
+    Value: Memory Tide
   - Key: 
     Value: 
   - Key: 

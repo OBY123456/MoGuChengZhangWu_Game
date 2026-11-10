@@ -66,7 +66,7 @@ public class PirateTreasureMapGameManager : BaseGameManager
 
     private struct EntranceItem
     {
-        public RectTransform Target;
+        public Transform Target;
         public Vector3 FinalScale;
         public Image Answer;
     }
@@ -160,7 +160,8 @@ public class PirateTreasureMapGameManager : BaseGameManager
             if (answerImage == null) continue;
             answerImage.sprite = question.Answers[answerIndices[side]];
             SetAnswerRotation(side, answerAngles[side]);
-            answerImage.rectTransform.localScale = answerScales[side] * AppearStartScale;
+            Transform answerRoot = GetAnswerRotationRoot(side);
+            if (answerRoot != null) answerRoot.localScale = Vector3.zero;
             answerImage.enabled = false;
         }
 
@@ -197,7 +198,8 @@ public class PirateTreasureMapGameManager : BaseGameManager
         for (int side = 0; side < 2; side++)
         {
             Image answerImage = GetAnswerImage(side);
-            if (answerImage != null) entranceItems.Add(new EntranceItem { Target = answerImage.rectTransform, FinalScale = answerScales[side], Answer = answerImage });
+            Transform answerRoot = GetAnswerRotationRoot(side);
+            if (answerImage != null && answerRoot != null) entranceItems.Add(new EntranceItem { Target = answerRoot, FinalScale = answerScales[side], Answer = answerImage });
         }
         if (animateButtonsOnEntrance)
         {
@@ -226,7 +228,7 @@ public class PirateTreasureMapGameManager : BaseGameManager
             if (item.Answer != null)
             {
                 Image answer = item.Answer;
-                entranceSequence.InsertCallback(time, () => answer.enabled = true);
+                entranceSequence.InsertCallback(time, () => { item.Target.localScale = item.FinalScale * AppearStartScale; answer.enabled = true; });
             }
             entranceSequence.Insert(time, CreateBounceTween(item.Target, item.FinalScale, duration));
         }
@@ -234,7 +236,7 @@ public class PirateTreasureMapGameManager : BaseGameManager
         entranceSequence.Play();
     }
 
-    private Sequence CreateBounceTween(RectTransform target, Vector3 finalScale, float duration)
+    private Sequence CreateBounceTween(Transform target, Vector3 finalScale, float duration)
     {
         Sequence bounce = DOTween.Sequence();
         Vector3 peakScale = finalScale * Mathf.Max(1.08f, BouncePeakScale);
@@ -376,13 +378,15 @@ public class PirateTreasureMapGameManager : BaseGameManager
         Image answerImage = GetAnswerImage(side);
         if (answerImage == null) return;
 
+        Transform answerRoot = GetAnswerRotationRoot(side);
+        if (answerRoot == null) return;
         if (sideTweens[side] != null) sideTweens[side].Kill();
         answerImage.sprite = jigsawQuestionDatas[questionIndex].Answers[answerIndices[side]];
         SetAnswerRotation(side, answerAngles[side]);
-        answerImage.rectTransform.localScale = answerScales[side] * AppearStartScale;
+        answerRoot.localScale = answerScales[side] * AppearStartScale;
         sideBusy[side] = true;
         RefreshSideButtons(side);
-        sideTweens[side] = CreateBounceTween(answerImage.rectTransform, answerScales[side], Mathf.Max(0.45f, AnswerSwitchDuration)).SetUpdate(true).OnComplete(() => FinishSideTween(side));
+        sideTweens[side] = CreateBounceTween(answerRoot, answerScales[side], Mathf.Max(0.45f, AnswerSwitchDuration)).SetUpdate(true).OnComplete(() => FinishSideTween(side));
         sideTweens[side].Play();
     }
 
@@ -541,9 +545,8 @@ public class PirateTreasureMapGameManager : BaseGameManager
         {
             questionResolved = true;
             inputEnabled = false;
-            StopQuestionTimer();
             DisableAllButtons();
-            ScheduleNextQuestion(CreateNextQuestion);
+            SchedulePuzzleQuestion();
         }
         EndProtectedAction();
     }
@@ -566,7 +569,15 @@ public class PirateTreasureMapGameManager : BaseGameManager
             sideTweens[side] = null;
             if (installTweens[side] == null) sideBusy[side] = false;
         }
+        RestoreAnswerScales();
         DisableAllButtons();
+        SchedulePuzzleQuestion();
+    }
+
+    private void SchedulePuzzleQuestion()
+    {
+        // 切题协程会先停止计时并刷新 UI，再等待切题间隔。
+        questionTimer = Mathf.Max(0.01f, QuestionDuration);
         ScheduleNextQuestion(CreateNextQuestion);
     }
 
@@ -610,8 +621,8 @@ public class PirateTreasureMapGameManager : BaseGameManager
         if (QuestionImage != null) questionScale = QuestionImage.rectTransform.localScale;
         for (int side = 0; side < 2; side++)
         {
-            Image answerImage = GetAnswerImage(side);
-            answerScales[side] = answerImage != null ? answerImage.rectTransform.localScale : Vector3.one;
+            Transform answerRoot = GetAnswerRotationRoot(side);
+            answerScales[side] = answerRoot != null ? answerRoot.localScale : Vector3.one;
             for (int action = 0; action < 3; action++)
             {
                 TouchUIButton button = GetButton(side, action);
@@ -620,6 +631,15 @@ public class PirateTreasureMapGameManager : BaseGameManager
             }
         }
         scalesCached = true;
+    }
+
+    private void RestoreAnswerScales()
+    {
+        for (int side = 0; side < 2; side++)
+        {
+            Transform answerRoot = GetAnswerRotationRoot(side);
+            if (answerRoot != null) answerRoot.localScale = answerScales[side];
+        }
     }
 
     private void BindButtons()
@@ -676,6 +696,7 @@ public class PirateTreasureMapGameManager : BaseGameManager
             if (sideTweens[side] != null) sideTweens[side].Kill();
             sideTweens[side] = null;
         }
+        RestoreAnswerScales();
     }
 
     protected override void CleanupGame()
