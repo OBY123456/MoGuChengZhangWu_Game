@@ -3739,7 +3739,7 @@ PrefabInstance:
     - target: {fileID: 6231806710506457468, guid: 2fdc8bb9e0becb04594149b45df22d73,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -391
+      value: -66
       objectReference: {fileID: 0}
     - target: {fileID: 6231806710506457468, guid: 2fdc8bb9e0becb04594149b45df22d73,
         type: 3}
@@ -3759,7 +3759,7 @@ PrefabInstance:
     - target: {fileID: 6231806710506457468, guid: 2fdc8bb9e0becb04594149b45df22d73,
         type: 3}
       propertyPath: m_AnchorMin.y
-      value: 0.5
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6231806710506457468, guid: 2fdc8bb9e0becb04594149b45df22d73,
         type: 3}
@@ -3769,7 +3769,7 @@ PrefabInstance:
     - target: {fileID: 6231806710506457468, guid: 2fdc8bb9e0becb04594149b45df22d73,
         type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0.5
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6231806710506457468, guid: 2fdc8bb9e0becb04594149b45df22d73,
         type: 3}
@@ -4132,7 +4132,7 @@ PrefabInstance:
     - target: {fileID: 1216103094397940473, guid: dc3ec0e3784310a46a203675470960ef,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 495
+      value: -105
       objectReference: {fileID: 0}
     - target: {fileID: 1216103094397940473, guid: dc3ec0e3784310a46a203675470960ef,
         type: 3}
@@ -4152,7 +4152,7 @@ PrefabInstance:
     - target: {fileID: 1216103094397940473, guid: dc3ec0e3784310a46a203675470960ef,
         type: 3}
       propertyPath: m_AnchorMin.y
-      value: 0.5
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1216103094397940473, guid: dc3ec0e3784310a46a203675470960ef,
         type: 3}
@@ -4162,7 +4162,7 @@ PrefabInstance:
     - target: {fileID: 1216103094397940473, guid: dc3ec0e3784310a46a203675470960ef,
         type: 3}
       propertyPath: m_AnchorMax.y
-      value: 0.5
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1216103094397940473, guid: dc3ec0e3784310a46a203675470960ef,
         type: 3}
