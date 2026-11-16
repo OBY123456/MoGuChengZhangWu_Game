@@ -6,6 +6,7 @@ using MTFrame.MTEvent;
 using TMPro;
 using DG.Tweening;
 using Lean.Pool;
+using LanguageSetting;
 
 public enum ResultType { 左边胜利 = 0, 右边胜利 = 1, 平局 = 2 }
 
@@ -19,7 +20,7 @@ public abstract class BaseGameManager : MonoBehaviour
     public bool WaitForExternalPreparationVoice;
 
     [Header("时间")]
-    [Min(1)] private float GameDuration = 60f;
+    [Min(1)] private float GameDuration = 20f;
     [Min(1)] public float QuestionDuration = 10f;
     [Min(0)] public float NextQuestionInterval = 1f;
 
@@ -43,6 +44,7 @@ public abstract class BaseGameManager : MonoBehaviour
     protected bool questionTimerRunning, questionResolved;
 
     private bool startupOwnedBySceneControl, readyGoStarted;
+    private bool sceneExitRequested;
     private Coroutine preparationRoutine, nextQuestionRoutine;
     private Action externalVoiceFinished;
     private int displayedLeftScore, displayedRightScore;
@@ -85,19 +87,20 @@ public abstract class BaseGameManager : MonoBehaviour
 
     private void AgainCallback(EventParamete data)
     {
-        if (!IsGameRunning && !IsPreparing) StartPreparation();
+        if (!sceneExitRequested && !IsGameRunning && !IsPreparing) StartPreparation();
     }
 
     public void BeginReadyGoFromSceneControl()
     {
+        if (sceneExitRequested || SceneControl.IsTransitionInProgress) return;
         startupOwnedBySceneControl = false;
-        StartPreparation();
+        if (isActiveAndEnabled) StartPreparation();
     }
 
     /// <summary>先生成题目/棋盘，再播准备语音；准备阶段不计时、不接收游戏输入。</summary>
     public void StartPreparation()
     {
-        if (IsGameRunning || IsPreparing || readyGoStarted) return;
+        if (sceneExitRequested || startupOwnedBySceneControl || SceneControl.IsTransitionInProgress || IsGameRunning || IsPreparing || readyGoStarted) return;
         IsPreparing = true;
         StopBGM();
         if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
@@ -162,7 +165,7 @@ public abstract class BaseGameManager : MonoBehaviour
 
     private void BeginActualGame()
     {
-        if (IsGameRunning || !readyGoStarted) return;
+        if (sceneExitRequested || SceneControl.IsTransitionInProgress || IsGameRunning || !IsPreparing || !readyGoStarted) return;
         IsPreparing = false;
         readyGoStarted = false;
         preparationRoutine = null;
@@ -442,6 +445,8 @@ public abstract class BaseGameManager : MonoBehaviour
 
     public virtual void CancelForSceneExit()
     {
+        if (sceneExitRequested) return;
+        sceneExitRequested = true;
         IsGameRunning = IsPreparing = false;
         readyGoStarted = false;
         pendingGameplayActions = 0;

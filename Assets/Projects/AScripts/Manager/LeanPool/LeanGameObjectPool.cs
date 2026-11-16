@@ -100,9 +100,6 @@ namespace Lean.Pool
 		/// <summary>Node within Instances.</summary>
 		private LinkedListNode<LeanGameObjectPool> node;
 
-        private bool destroying;
-        internal bool IsDestroying { get { return destroying; } }
-
 		private static Dictionary<GameObject, LeanGameObjectPool> prefabMap = new Dictionary<GameObject, LeanGameObjectPool>();
 
 		private static List<IPoolable> tempPoolables = new List<IPoolable>();
@@ -110,23 +107,15 @@ namespace Lean.Pool
 		/// <summary>Find the pool responsible for handling the specified prefab.</summary>
 		public static bool TryFindPoolByPrefab(GameObject prefab, ref LeanGameObjectPool foundPool)
 		{
-            foundPool = null;
-            if (prefab == null || !prefabMap.TryGetValue(prefab, out foundPool)) return false;
-            if (foundPool != null && !foundPool.destroying) return true;
-            prefabMap.Remove(prefab);
-            foundPool = null;
-            return false;
+			return prefabMap.TryGetValue(prefab, out foundPool);
 		}
 
 		/// <summary>Find the pool responsible for handling the specified prefab clone.
 		/// NOTE: This can be an expensive operation if you have many large pools.</summary>
 		public static bool TryFindPoolByClone(GameObject clone, ref LeanGameObjectPool pool)
 		{
-            pool = null;
-            if (clone == null) return false;
 			foreach (var instance in Instances)
 			{
-                if (instance == null || instance.destroying) continue;
 				// Search hash set
 				if (instance.spawnedClonesHashSet.Contains(clone) == true)
 				{
@@ -180,8 +169,6 @@ namespace Lean.Pool
 		/// <summary>This will either spawn a previously despanwed/preloaded clone, recycle one, create a new one, or return null.</summary>
 		public void Spawn()
 		{
-            if (this == null || destroying) return;
-
 			Spawn(transform.position, transform.rotation);
 		}
 
@@ -197,8 +184,6 @@ namespace Lean.Pool
 		/// <summary>This will either spawn a previously despanwed/preloaded clone, recycle one, create a new one, or return null.</summary>
 		public bool TrySpawn(Vector3 position, Quaternion rotation, Transform parent, bool worldPositionStays, ref GameObject clone)
 		{
-            if (this == null || destroying) return false;
-
 			if (prefab != null)
 			{
 				// Spawn a previously despanwed/preloaded clone?
@@ -269,8 +254,6 @@ namespace Lean.Pool
 
 		private bool TryDespawnOldest(ref GameObject clone, bool registerDespawned)
 		{
-            if (this == null || destroying) return false;
-
 			MergeSpawnedClonesToList();
 
 			// Loop through all spawnedClones from the front (oldest) until one is found
@@ -297,8 +280,6 @@ namespace Lean.Pool
 		[ContextMenu("Despawn All")]
 		public void DespawnAll()
 		{
-            if (this == null || destroying) return;
-
 			// Merge
 			MergeSpawnedClonesToList();
 
@@ -327,8 +308,6 @@ namespace Lean.Pool
 		/// <summary>This will either instantly despawn the specified gameObject, or delay despawn it after t seconds.</summary>
 		public void Despawn(GameObject clone, float t = 0.0f)
 		{
-            if (this == null || destroying || clone == null) return;
-
 			if (clone != null)
 			{
 				// Delay the despawn?
@@ -363,8 +342,6 @@ namespace Lean.Pool
 		[ContextMenu("Preload One More")]
 		public void PreloadOneMore()
 		{
-            if (this == null || destroying) return;
-
 			if (prefab != null)
 			{
 				// Create clone
@@ -391,8 +368,6 @@ namespace Lean.Pool
 		[ContextMenu("Preload All")]
 		public void PreloadAll()
 		{
-            if (this == null || destroying) return;
-
 			if (Preload > 0)
 			{
 				if (prefab != null)
@@ -428,19 +403,12 @@ namespace Lean.Pool
 
 		protected virtual void OnDisable()
 		{
-            UnregisterPrefab();
-            if (node != null && node.List == Instances) Instances.Remove(node);
-            node = null;
-		}
+			UnregisterPrefab();
 
-        protected virtual void OnDestroy()
-        {
-            destroying = true;
-            UnregisterPrefab();
-            if (node != null && node.List == Instances) Instances.Remove(node);
-            node = null;
-            LeanPool.RemovePoolLinks(this);
-        }
+			Instances.Remove(node);
+
+			node = null;
+		}
 
 		protected virtual void Update()
 		{
@@ -546,18 +514,20 @@ namespace Lean.Pool
 
 		private void DespawnNow(GameObject clone, bool register = true)
 		{
-            if (this == null || destroying || clone == null) return;
-            if (register) despawnedClones.Add(clone);
+			// Add clone to despawned list
+			if (register == true)
+			{
+				despawnedClones.Add(clone);
+			}
 
-            InvokeOnDespawn(clone);
-            // OnDespawn回调可能销毁clone或池，调用后必须重新判断。
-            if (this == null || destroying || clone == null) return;
+			// Messages?
+			InvokeOnDespawn(clone);
 
-            clone.SetActive(false);
-            // SetActive(false)会同步触发OnDisable，其中也可能销毁clone或池。
-            if (this == null || destroying || clone == null) return;
+			// Deactivate it
+			clone.SetActive(false);
 
-            clone.transform.SetParent(transform, false);
+			// Move it under this GO
+			clone.transform.SetParent(transform, false);
 		}
 
 		private GameObject CreateClone(Vector3 position, Quaternion rotation, Transform parent, bool worldPositionStays)

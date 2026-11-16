@@ -375,6 +375,11 @@ PrefabInstance:
       propertyPath: m_SizeDelta.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3398331891092128391, guid: d2f7c212578e42940aa2f5dbfd009d63,
+        type: 3}
+      propertyPath: AnswerEffectCamera
+      value: 
+      objectReference: {fileID: 842451895}
     - target: {fileID: 3398331891092128392, guid: d2f7c212578e42940aa2f5dbfd009d63,
         type: 3}
       propertyPath: m_Name

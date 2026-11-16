@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using Config;
@@ -7,8 +6,8 @@ using DG.Tweening;
 using LanguageSetting;
 using MTFrame.MTEvent;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// 五关通用结算 UI。场景切换由外部控制器处理。
@@ -70,19 +69,8 @@ public class EndPanel : MonoBehaviour
     public GameObject[] CheckmarkBackground = new GameObject[2];
     public GameObject[] CheckmarkIcon = new GameObject[2];
 
-    [Header("可选：额外需要入场动画的 UI")]
-    [Tooltip("例如【本局结算】标题或标题下的短横线的公共父物体")]
-    public RectTransform SettlementHeading;
-    [Tooltip("右上角 05 倒计时的完整背景框；不填时只动画数字")]
-    public RectTransform CountDownRoot;
-    [Tooltip("非必填：如果单独显示最后分数，可赋值文本")]
-    public Text LeftFinalScoreText;
-    public Text RightFinalScoreText;
-
-    [Header("下一关的场景切换入口")]
-    [Tooltip("关闭：使用原来的 UIState 消息 Next；开启：使用下方 UnityEvent")]
-    public bool UseNextLevelUnityEvent;
-    public UnityEvent NextLevelEvent = new UnityEvent();
+    [Tooltip("当不是最后一关的时候显示：进入下一关，当已经是最后一关的时候显示：返回首页")]
+    public Text NextLevelText;
 
     [Header("入场与离场速度（使用真实时间，不受暂停影响）")]
     [Min(0.1f)] public float BackgroundDuration = 0.48f;
@@ -103,6 +91,7 @@ public class EndPanel : MonoBehaviour
     private bool hasInitialized;
     private bool isShowing;
     private bool transitionRequested;
+    private bool isLastLevel;
     private bool buttonsBound;
     private int sessionId;
     private Sequence entranceSequence;
@@ -165,6 +154,7 @@ public class EndPanel : MonoBehaviour
 
     public void ShowResult(ResultType result, int leftScore, int rightScore)
     {
+        if (SceneControl.IsTransitionInProgress) return;
         if (!gameObject.activeSelf) gameObject.SetActive(true);
         InitializeOnce();
         StopAnimations();
@@ -178,7 +168,8 @@ public class EndPanel : MonoBehaviour
         isShowing = true;
         transitionRequested = false;
 
-        ApplyContent(result, leftScore, rightScore);
+        isLastLevel = IsCurrentGameLastLevel();
+        ApplyContent(result);
         SetButtonsEnabled(false);
         Myself.alpha = 0f;
         Myself.interactable = false;
@@ -202,7 +193,7 @@ public class EndPanel : MonoBehaviour
         PlayResultAudio(result);
     }
 
-    private void ApplyContent(ResultType result, int left, int right)
+    private void ApplyContent(ResultType result)
     {
         int index = Mathf.Clamp((int)result, 0, 2);
         Sprite sprite = PickSprite(EndPanelSprite, index);
@@ -211,8 +202,6 @@ public class EndPanel : MonoBehaviour
         if (ResultText != null) ResultText.text = Localize(result.ToString());
         string description = result == ResultType.平局 ? "旗鼓相当，再来一局！" : "漂亮的一局，继续保持！";
         if (EncouragementText != null) EncouragementText.text = Localize(description);
-        if (LeftFinalScoreText != null) LeftFinalScoreText.text = FormatScore(left);
-        if (RightFinalScoreText != null) RightFinalScoreText.text = FormatScore(right);
         if (CountDownText != null) CountDownText.text = Mathf.CeilToInt(autoNextCountDown).ToString("00");
 
         if (EqualSign != null) EqualSign.SetActive(result == ResultType.平局);
@@ -224,8 +213,10 @@ public class EndPanel : MonoBehaviour
             bool winner = result != ResultType.平局 && (int)result == side;
             if (icon != null) icon.SetActive(winner);
         }
+        string nextLabel = isLastLevel ? "返回首页" : "进入下一关";
+        if (NextLevelText != null) NextLevelText.text = LanguageManger.Instance != null ? LanguageManger.Instance.GetValue(nextLabel) : nextLabel;
         if (VectorEff != null) VectorEff.SetActive(false);
-        if (NextBtn != null) NextBtn.gameObject.SetActive(true);
+        if (NextBtn != null) NextBtn.gameObject.SetActive(!isLastLevel);
         if (AgainBtn != null) AgainBtn.gameObject.SetActive(true);
     }
 
@@ -237,7 +228,6 @@ public class EndPanel : MonoBehaviour
         {
             sequence.Insert(0f, EndPanelImage.rectTransform.DOScale(backgroundScale, duration).SetEase(Ease.OutBack, 1.18f));
         }
-        EnterFade(sequence, GetPart(SettlementHeading), duration * 0.82f, 0.22f);
     }
 
     private void BuildVictoryEntrance(Sequence sequence, ResultType result)
@@ -276,9 +266,7 @@ public class EndPanel : MonoBehaviour
         float baseTime = Mathf.Max(0.1f, BackgroundDuration);
         float duration = Mathf.Max(0.1f, ElementDuration);
         EnterSlide(sequence, GetPart(AgainBtn), baseTime + 1.18f, duration, new Vector2(0f, -24f));
-        EnterSlide(sequence, GetPart(NextBtn), baseTime + 1.30f, duration, new Vector2(0f, -24f));
-        RectTransform countdown = CountDownRoot != null ? CountDownRoot : CountDownText != null ? CountDownText.rectTransform : null;
-        EnterFade(sequence, GetPart(countdown), baseTime + 1.48f, 0.26f);
+        if (!isLastLevel) EnterSlide(sequence, GetPart(NextBtn), baseTime + 1.30f, duration, new Vector2(0f, -24f));
     }
 
     private void FinishEntrance(int id)
@@ -389,15 +377,51 @@ public class EndPanel : MonoBehaviour
         return manager != null ? manager.GetValue(text) : text;
     }
 
-    private static string FormatScore(int score)
-    {
-        return score + " " + Localize("分");
-    }
-
     private void SetButtonsEnabled(bool enabled)
     {
-        if (NextBtn != null) NextBtn.interactable = enabled;
+        if (NextBtn != null) NextBtn.interactable = enabled && !isLastLevel;
         if (AgainBtn != null) AgainBtn.interactable = enabled;
+    }
+
+    private static bool IsCurrentGameLastLevel()
+    {
+        SceneControl controller = SceneControl.Instance;
+        if (controller == null) return false;
+        string activeScene = SceneManager.GetActiveScene().name;
+        SceneData data = controller.CurrentGameData;
+        int index = controller.CurrentLevelIndex;
+        if (data == null || data.SceneName == null || index < 0 || index >= data.SceneName.Length || data.SceneName[index] != activeScene)
+        {
+            data = null;
+            if (controller.SceneDatas != null)
+            {
+                foreach (SceneData entry in controller.SceneDatas)
+                {
+                    if (entry == null || entry.SceneName == null) continue;
+                    int found = Array.IndexOf(entry.SceneName, activeScene);
+                    if (found < 0) continue;
+                    data = entry;
+                    index = found;
+                    break;
+                }
+            }
+        }
+        if (data == null || data.SceneName == null) return false;
+        for (int next = index + 1; next < data.SceneName.Length; next++)
+        {
+            if (!string.IsNullOrWhiteSpace(data.SceneName[next])) return false;
+        }
+        return true;
+    }
+
+    private static void NotifyControllerReturnHome()
+    {
+        try
+        {
+            UDPSend sender = UDPSend.Instance;
+            if (sender != null) sender.TrySend(ClassEnum.OrderData, new OrderData(Order.返回首页));
+        }
+        catch (Exception exception) { Debug.LogWarning("通知控制端返回首页失败，继续本地返回：" + exception.Message); }
     }
 
     private void AgainEvent()
@@ -412,7 +436,7 @@ public class EndPanel : MonoBehaviour
 
     private void BeginExit(bool again)
     {
-        if (!isShowing || transitionRequested) return;
+        if (!isShowing || transitionRequested || SceneControl.IsTransitionInProgress) return;
         transitionRequested = true;
         SetButtonsEnabled(false);
         StopAnimations();
@@ -422,20 +446,34 @@ public class EndPanel : MonoBehaviour
 
     private void FinishExit(int id, bool again)
     {
-        if (id != sessionId) return;
+        if (id != sessionId || SceneControl.IsTransitionInProgress) return;
         exitTween = null;
         HideNow();
         if (again)
         {
             UIState.SendEventMsg("Again", "Again");
         }
-        else if (UseNextLevelUnityEvent)
-        {
-            NextLevelEvent?.Invoke();
-        }
         else
         {
-            UIState.SendEventMsg("Next", "Next");
+            SceneControl controller = SceneControl.Instance;
+            if (controller != null && isLastLevel)
+            {
+                NotifyControllerReturnHome();
+                controller.Back();
+                return;
+            }
+            if (controller != null && controller.TryLoadNextGameScene()) return;
+            if (SceneControl.IsTransitionInProgress) return;
+            Debug.LogError("下一关切换失败，请检查 SceneControl 的场景配置。", this);
+            isShowing = true;
+            transitionRequested = false;
+            if (Myself != null)
+            {
+                Myself.alpha = 1f;
+                Myself.interactable = true;
+                Myself.blocksRaycasts = true;
+            }
+            SetButtonsEnabled(true);
         }
     }
 

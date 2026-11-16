@@ -118,15 +118,15 @@ MonoBehaviour:
     Value: Free Mode
   - Key: "\u4ED8\u8D39\u6A21\u5F0F"
     Value: Payment Model
-  - Key: "\u7B2C\u4E00\u5173"
+  - Key: "\u7B2C1\u5173"
     Value: Level 1
-  - Key: "\u7B2C\u4E8C\u5173"
+  - Key: "\u7B2C2\u5173"
     Value: Level 2
-  - Key: "\u7B2C\u4E09\u5173"
+  - Key: "\u7B2C3\u5173"
     Value: Level 3
-  - Key: "\u7B2C\u56DB\u5173"
+  - Key: "\u7B2C4\u5173"
     Value: Level 4
-  - Key: "\u7B2C\u4E94\u5173"
+  - Key: "\u7B2C5\u5173"
     Value: Level 5
   - Key: "\u5206"
     Value: PT
@@ -188,18 +188,18 @@ MonoBehaviour:
     Value: Memory Hold
   - Key: "\u8BB0\u5FC6\u6F6E"
     Value: Memory Tide
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
-  - Key: 
-    Value: 
+  - Key: "\u2014\u6B63\u5728\u5BFB\u627E\u5B9D\u85CF\uFF0C\u8BF7\u7A0D\u540E\u2014"
+    Value: "\u2014Searching for treasure, please wait\u2014"
+  - Key: "\u2014\u6B63\u5728\u5BFB\u627E\u68EE\u6797\u7EBF\u7D22\uFF0C\u8BF7\u7A0D\u540E\u2014"
+    Value: "\u2014Searching for forest clues, please wait\u2014"
+  - Key: "\u2014\u6B63\u5728\u542F\u52A8\u592A\u7A7A\u4EFB\u52A1\uFF0C\u8BF7\u7A0D\u540E\u2014"
+    Value: "\u2014Launching space mission, please wait\u2014"
+  - Key: "\u2014\u6B63\u5728\u63A2\u7D22\u6D77\u6D0B\u4EFB\u52A1\uFF0C\u8BF7\u7A0D\u540E\u2014"
+    Value: "\u2014Exploring ocean mission, please wait\u2014"
+  - Key: "\u52A0\u8F7D\u4E2D..."
+    Value: Loading...
+  - Key: "\u8FD4\u56DE\u9996\u9875"
+    Value: Back Home
   - Key: 
     Value: 
   - Key: 

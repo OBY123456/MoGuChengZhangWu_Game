@@ -21,27 +21,24 @@ public class DataClass
 /// </summary>
 public enum ClassEnum
 {
-    UdpSceneName,
+    UdpGameName,
     GameData,
-    DrawData,
-    TimeData,
     OrderData,
-    SceneState,
-    MsgData,
+    HeartbeatData,
 }
 
 /// <summary>
 /// 场景名字
 /// </summary>
-public class UdpSceneName
+public class UdpGameName
 {
-    public string Scenename;
+    public string GameName;
 
-    public UdpSceneName() { }
+    public UdpGameName() { }
 
-    public UdpSceneName(string _Scenename)
+    public UdpGameName(string _Scenename)
     {
-        Scenename = _Scenename;
+        GameName = _Scenename;
     }
 }
 
@@ -56,9 +53,9 @@ public class GameData
 
     public float Moeny;
 
-    public GameData(){ }
+    public GameData() { }
 
-    public GameData(PanelName _panelName,int _Times = -1,float _Moeny = 0)
+    public GameData(PanelName _panelName, int _Times = -1, float _Moeny = 0)
     {
         panelName = _panelName;
         Times = _Times;
@@ -66,82 +63,17 @@ public class GameData
     }
 }
 
-public class MsgData
-{
-    public string Msg;
-
-    [Newtonsoft.Json.JsonProperty]
-    private string color;
-
-    public int Index;
-
-    public MsgData(){ }
-
-    public MsgData(string _Msg,Color _color,int _Index)
-    {
-        Msg = _Msg;
-        color = ColorUtility.ToHtmlStringRGBA(_color);
-        Index = _Index;
-    }
-
-    public bool GetColor(out Color c)
-    {
-        return ColorUtility.TryParseHtmlString("#" + color,out c);
-    }
-}
-
-public class DrawData
-{
-    public int Index;
-
-    public string ImageBase64;
-
-    public DrawData(){ }
-
-    public DrawData(int _Index,string _ImageBase64)
-    {
-        Index = _Index;
-        ImageBase64 = _ImageBase64;
-    }
-}
-
-public class TimeData
-{
-    public int Times;
-
-    public TimeData(){ }
-
-    public TimeData(int _Times)
-    {
-        Times = _Times;
-    }
-}
-
-public class SceneState
-{
-    public string SceneName;
-
-    public PanelName panelName;
-
-    public SceneState(){ }
-
-    public SceneState(string _SceneName,PanelName _panelName)
-    {
-        SceneName = _SceneName;
-        panelName = _panelName;
-    }
-}
-
 public enum Order
 {
-    获取场景状态,
+    下一关,
+    返回首页,
 }
 
 public class OrderData
 {
     public Order order;
 
-    public OrderData(){ }
+    public OrderData() { }
 
     public OrderData(Order _order)
     {
@@ -150,29 +82,98 @@ public class OrderData
 }
 
 /// <summary>
-/// 将类转为封装类的json字符串
+/// 自动发现和心跳消息，仅由网络脚本处理，不派发游戏事件。
+/// </summary>
+public enum HeartbeatType
+{
+    None,
+    Discover,
+    Offer,
+    Ping,
+    Pong,
+}
+
+public class HeartbeatData
+{
+    public HeartbeatType Type;
+
+    public HeartbeatData() { }
+
+    public HeartbeatData(HeartbeatType type)
+    {
+        Type = type;
+    }
+}
+
+/// <summary>
+/// 统一封装 UDP 数据，classJson 保存具体消息的 JSON。
 /// </summary>
 public static class ClassToJson
 {
+    private static readonly Newtonsoft.Json.JsonSerializerSettings Settings = new Newtonsoft.Json.JsonSerializerSettings { TypeNameHandling = Newtonsoft.Json.TypeNameHandling.None, MaxDepth = 32 };
+
+    public static System.Type GetDataType(ClassEnum classEnum)
+    {
+        switch (classEnum)
+        {
+            case ClassEnum.UdpGameName: return typeof(UdpGameName);
+            case ClassEnum.GameData: return typeof(GameData);
+            case ClassEnum.OrderData: return typeof(OrderData);
+            case ClassEnum.HeartbeatData: return typeof(HeartbeatData);
+            default: return null;
+        }
+    }
+
+    public static bool TryGetClassEnum(DataClass data, out ClassEnum classEnum)
+    {
+        classEnum = default(ClassEnum);
+        return data != null && System.Enum.TryParse(data.className, false, out classEnum) && GetDataType(classEnum) != null && classEnum.ToString() == data.className;
+    }
+
+    public static T Parse<T>(string json) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(json) || !json.TrimStart().StartsWith("{")) return null;
+        return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(json, Settings);
+    }
+
+    public static bool TryParseEnvelope(string json, out DataClass data)
+    {
+        data = null;
+        try
+        {
+            DataClass parsed = Parse<DataClass>(json);
+            ClassEnum classEnum;
+            if (!TryGetClassEnum(parsed, out classEnum) || string.IsNullOrWhiteSpace(parsed.classJson)) return false;
+            data = parsed;
+            return true;
+        }
+        catch (System.Exception) { return false; }
+    }
+
+    public static DataClass CreateData(ClassEnum classEnum, object data)
+    {
+        if (data == null || data.GetType() != GetDataType(classEnum)) return null;
+        try
+        {
+            string classJson = Newtonsoft.Json.JsonConvert.SerializeObject(data, Settings);
+            return new DataClass(classEnum.ToString(), classJson);
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogError("CreateData 序列化失败：" + exception.Message);
+            return null;
+        }
+    }
+
     public static string GetJson(ClassEnum classEnum, object data)
     {
-        if (data != null)
-        {
-            try
-            {
-                string temp = Newtonsoft.Json.JsonConvert.SerializeObject(new DataClass(classEnum.ToString(), Newtonsoft.Json.JsonConvert.SerializeObject(data)));
-                return temp;
-            }
-            catch
-            {
-                Debug.LogError("GetJson 数据为空");
-                return string.Empty;
-            }
+        return GetJson(CreateData(classEnum, data));
+    }
 
-        }
-        else
-        {
-            return string.Empty;
-        }
+    public static string GetJson(DataClass data)
+    {
+        ClassEnum classEnum;
+        if (!TryGetClassEnum(data, out classEnum) || string.IsNullOrWhiteSpace(data.classJson)) return string.Empty;
+        return Newtonsoft.Json.JsonConvert.SerializeObject(data, Settings);
     }
 }

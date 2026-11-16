@@ -1,6 +1,4 @@
-﻿// 投影安卓板：直接接收 UTF-8 明文游戏指令，并转发到原有 MTFrame 事件。
-// 自动发现和心跳使用明文保留词；没有自定义包头、Base64、ACK 或消息去重。
-
+﻿// 投影端：统一接收 DataClass，在主线程解析消息并派发具体类型事件。
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -9,38 +7,17 @@ using System.Text;
 using System.Threading;
 using MTFrame.MTEvent;
 using UnityEngine;
-using UnityEngine.Events;
 
 [DisallowMultipleComponent]
 public class UDPReceive : MonoBehaviour
 {
-    [Serializable] public sealed class MessageEvent : UnityEvent<string> { }
-    [Serializable] public sealed class ConnectionEvent : UnityEvent<bool> { }
-
-    private struct Datagram
-    {
-        public string Text;
-        public IPEndPoint Remote;
-
-        public Datagram(string text, IPEndPoint remote)
-        {
-            Text = text;
-            Remote = remote;
-        }
-    }
-
-    private const string DiscoverText = "__UDP_DISCOVER__";
-    private const string OfferText = "__UDP_OFFER__";
-    private const string PingText = "__UDP_PING__";
-    private const string PongText = "__UDP_PONG__";
     private const int MaxDatagramBytes = 1200;
     private const int ReceiveBufferSize = 2048;
-    private const int MaxQueuedDatagrams = 256;
+    private const int MaxQueuedMessages = 256;
     private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
 
     public static UDPReceive Instance { get; private set; }
 
-    [Header("投影端 UDP 监听")]
     [SerializeField] private int listenPort = 8060;
     [SerializeField] private bool persistAcrossScenes = true;
     [SerializeField, Min(1f)] private float clientTimeoutSeconds = 5f;
@@ -48,21 +25,14 @@ public class UDPReceive : MonoBehaviour
     [SerializeField, Range(1, 256)] private int maxProcessPerFrame = 64;
     [SerializeField] private bool logNetworkState = true;
 
-    [Header("游戏指令事件")]
-    [SerializeField] private bool forwardToOriginalPanelEvent = true;
-    [SerializeField] private MessageEvent onCommandReceived = new MessageEvent();
-    [SerializeField] private ConnectionEvent onClientConnectionChanged = new ConnectionEvent();
-
     public bool IsClientConnected { get; private set; }
     public string ConnectedClientIp { get; private set; }
     public string LastReceivedMessage { get; private set; }
     public int ListenPort { get { return listenPort; } }
-    public event Action<string> CommandReceived;
-    public event Action<bool> ClientConnectionChanged;
+    public bool HasRecentClient => IsClientConnected && socket != null && !paused && isActiveAndEnabled && Time.realtimeSinceStartup - lastClientMessageTime <= clientTimeoutSeconds;
 
     private readonly object queueLock = new object();
-    private readonly object sendLock = new object();
-    private readonly Queue<Datagram> incoming = new Queue<Datagram>();
+    private readonly Queue<KeyValuePair<IPEndPoint, DataClass>> incoming = new Queue<KeyValuePair<IPEndPoint, DataClass>>();
 
     private Socket socket;
     private Thread receiveThread;
@@ -109,7 +79,6 @@ public class UDPReceive : MonoBehaviour
         {
             newSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             newSocket.ReceiveTimeout = 1000;
-            newSocket.SendTimeout = 200;
             newSocket.Bind(new IPEndPoint(IPAddress.Any, listenPort));
 
             socket = newSocket;
@@ -136,7 +105,7 @@ public class UDPReceive : MonoBehaviour
     {
         byte[] buffer = new byte[ReceiveBufferSize];
 
-        while (receiving)
+        while (receiving && ReferenceEquals(socket, activeSocket))
         {
             try
             {
@@ -150,16 +119,19 @@ public class UDPReceive : MonoBehaviour
                 try { text = Utf8.GetString(buffer, 0, count); }
                 catch (DecoderFallbackException) { continue; }
 
-                Datagram datagram = new Datagram(text, new IPEndPoint(sender.Address, sender.Port));
+                DataClass data;
+                if (!ClassToJson.TryParseEnvelope(text, out data)) continue;
+                KeyValuePair<IPEndPoint, DataClass> message = new KeyValuePair<IPEndPoint, DataClass>(new IPEndPoint(sender.Address, sender.Port), data);
                 lock (queueLock)
                 {
-                    if (incoming.Count >= MaxQueuedDatagrams) incoming.Dequeue();
-                    incoming.Enqueue(datagram);
+                    if (!receiving || !ReferenceEquals(socket, activeSocket)) break;
+                    if (incoming.Count >= MaxQueuedMessages) incoming.Dequeue();
+                    incoming.Enqueue(message);
                 }
             }
             catch (SocketException ex)
             {
-                if (!receiving) break;
+                if (!receiving || !ReferenceEquals(socket, activeSocket)) break;
                 if (ex.SocketErrorCode == SocketError.TimedOut || ex.SocketErrorCode == SocketError.WouldBlock) continue;
                 backgroundError = ex.Message;
                 socketFaulted = true;
@@ -168,7 +140,7 @@ public class UDPReceive : MonoBehaviour
             catch (ObjectDisposedException) { break; }
             catch (Exception ex)
             {
-                if (!receiving) break;
+                if (!receiving || !ReferenceEquals(socket, activeSocket)) break;
                 backgroundError = ex.Message;
                 socketFaulted = true;
                 break;
@@ -183,14 +155,14 @@ public class UDPReceive : MonoBehaviour
         int processed = 0;
         while (processed < maxProcessPerFrame)
         {
-            Datagram datagram;
+            KeyValuePair<IPEndPoint, DataClass> message;
             lock (queueLock)
             {
                 if (incoming.Count == 0) break;
-                datagram = incoming.Dequeue();
+                message = incoming.Dequeue();
             }
 
-            ProcessIncoming(datagram);
+            DeliverToGame(message.Value, message.Key);
             processed++;
         }
 
@@ -208,82 +180,54 @@ public class UDPReceive : MonoBehaviour
         if (!paused && socket == null && now >= nextOpenTime) Init();
     }
 
-    private void ProcessIncoming(Datagram datagram)
+    private void DeliverToGame(DataClass data, IPEndPoint remote)
     {
-        string text = datagram.Text;
-
-        if (text == DiscoverText)
+        try
         {
-            if (IsClientConnected && clientEndpoint != null && !SameEndpoint(datagram.Remote, clientEndpoint))
+            ClassEnum classEnum;
+            if (!ClassToJson.TryGetClassEnum(data, out classEnum)) return;
+            if (classEnum == ClassEnum.HeartbeatData)
             {
-                bool expired = Time.realtimeSinceStartup - lastClientMessageTime > clientTimeoutSeconds;
-                bool sameIp = datagram.Remote.Address.Equals(clientEndpoint.Address);
-                if (!expired && !sameIp) return;
+                HeartbeatData heartbeat = ClassToJson.Parse<HeartbeatData>(data.classJson);
+                if (heartbeat != null) HandleHeartbeat(heartbeat, remote);
+                return;
             }
 
-            clientEndpoint = datagram.Remote;
-            lastClientMessageTime = Time.realtimeSinceStartup;
-            ChangeClientConnection(true);
-            SendText(OfferText, clientEndpoint);
-            return;
+            // 业务消息无需先完成发现握手，解析成功后即可识别控制端并派发。
+            switch (classEnum)
+            {
+                case ClassEnum.UdpGameName: DispatchToGame(ClassToJson.Parse<UdpGameName>(data.classJson), data, remote); break;
+                case ClassEnum.OrderData: DispatchToGame(ClassToJson.Parse<OrderData>(data.classJson), data, remote); break;
+            }
         }
+        catch (Exception ex) { Debug.LogError("[UDPReceive] 数据解析或游戏事件异常：" + ex, this); }
+    }
 
-        if (!IsClientConnected || !SameEndpoint(datagram.Remote, clientEndpoint)) return;
+    private void DispatchToGame<T>(T value, DataClass data, IPEndPoint remote) where T : class
+    {
+        if (value == null || !AcceptClient(remote)) return;
+        LastReceivedMessage = ClassToJson.GetJson(data);
+        SceneControl controller = SceneControl.Instance;
+        if (controller == null) return;
+        EventParamete eventParamete = new EventParamete();
+        eventParamete.AddParameter(value);
+        EventManager.TriggerEvent(GenericEventEnumType.Message, typeof(T).Name, eventParamete);
+    }
+
+    private void HandleHeartbeat(HeartbeatData heartbeat, IPEndPoint remote)
+    {
+        // 单向保活，不发送 Offer、Pong 或其他回应，也不派发游戏事件。
+        if (heartbeat.Type == HeartbeatType.Discover || heartbeat.Type == HeartbeatType.Ping) AcceptClient(remote);
+    }
+
+    private bool AcceptClient(IPEndPoint remote)
+    {
+        if (remote == null) return false;
+        if (HasRecentClient && clientEndpoint != null && !remote.Address.Equals(clientEndpoint.Address)) return false;
+        clientEndpoint = remote;
         lastClientMessageTime = Time.realtimeSinceStartup;
-
-        if (text == PingText)
-        {
-            SendText(PongText, clientEndpoint);
-            return;
-        }
-
-        if (text == OfferText || text == PongText) return;
-        DeliverToGame(text);
-    }
-
-    private void DeliverToGame(string message)
-    {
-        LastReceivedMessage = message;
-
-        try
-        {
-            if (CommandReceived != null) CommandReceived(message);
-        }
-        catch (Exception ex) { Debug.LogError("[UDPReceive] C# 指令事件异常：" + ex, this); }
-
-        try
-        {
-            if (onCommandReceived != null) onCommandReceived.Invoke(message);
-        }
-        catch (Exception ex) { Debug.LogError("[UDPReceive] Inspector 指令事件异常：" + ex, this); }
-
-        if (!forwardToOriginalPanelEvent) return;
-
-        try
-        {
-            EventParamete eventParamete = new EventParamete();
-            eventParamete.AddParameter(message);
-            EventManager.TriggerEvent(GenericEventEnumType.Message, MTPanel.EventType.DataToPanel.ToString(), eventParamete);
-        }
-        catch (Exception ex) { Debug.LogError("[UDPReceive] MTFrame 游戏事件异常：" + ex, this); }
-    }
-
-    private bool SendText(string text, IPEndPoint remote)
-    {
-        Socket activeSocket = socket;
-        if (activeSocket == null || remote == null) return false;
-        byte[] bytes = Utf8.GetBytes(text);
-
-        try
-        {
-            lock (sendLock) return activeSocket.SendTo(bytes, remote) == bytes.Length;
-        }
-        catch (SocketException ex)
-        {
-            if (logNetworkState) Debug.LogWarning("[UDPReceive] 发送回应失败：" + ex.Message, this);
-            return false;
-        }
-        catch (ObjectDisposedException) { return false; }
+        ChangeClientConnection(true);
+        return true;
     }
 
     private void ChangeClientConnection(bool online)
@@ -293,19 +237,12 @@ public class UDPReceive : MonoBehaviour
         IsClientConnected = online;
 
         if (logNetworkState) Debug.Log(online ? "[UDPReceive] 已连接触摸端：" + ConnectedClientIp : "[UDPReceive] 触摸端心跳超时，等待重连。", this);
-        if (ClientConnectionChanged != null) ClientConnectionChanged(online);
-        if (onClientConnectionChanged != null) onClientConnectionChanged.Invoke(online);
     }
 
     private void DisconnectClient()
     {
         ChangeClientConnection(false);
         clientEndpoint = null;
-    }
-
-    private static bool SameEndpoint(IPEndPoint a, IPEndPoint b)
-    {
-        return a != null && b != null && a.Port == b.Port && a.Address.Equals(b.Address);
     }
 
     private void StopSocket(bool reportDisconnected)
