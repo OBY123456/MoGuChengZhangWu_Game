@@ -322,8 +322,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   BGM: {fileID: 4703225150307045645}
   PreparationVoiceSource: {fileID: 1650258143194177348}
-  PreparationVoiceClip: {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b,
-    type: 3}
+  PreparationVoiceClip:
+  - {fileID: 8300000, guid: be85646407757e14bb4f1afc81fb7916, type: 3}
+  - {fileID: 8300000, guid: 12683ff6f66142446919e99729dcc821, type: 3}
   WaitForExternalPreparationVoice: 0
   QuestionDuration: 20
   NextQuestionInterval: 1

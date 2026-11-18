@@ -232,12 +232,6 @@ MonoBehaviour:
     Logo:
     - {fileID: 21300000, guid: 99e5febe03f1d7a41b44083cfe2828ed, type: 3}
     - {fileID: 21300000, guid: 6cf3bfb62c3916249a8a06ccc652c829, type: 3}
-    audioClips:
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
     loadingPrompt: "\u2014\u6B63\u5728\u5BFB\u627E\u5B9D\u85CF\uFF0C\u8BF7\u7A0D\u540E\u2014"
   - GameName: "\u68EE\u6797\u4FA6\u63A2"
     SceneName:
@@ -250,12 +244,6 @@ MonoBehaviour:
     Logo:
     - {fileID: 21300000, guid: e421eb26e8aa1f24eabcc91614ffdee7, type: 3}
     - {fileID: 21300000, guid: 31a6c726f918716449eca5c006180378, type: 3}
-    audioClips:
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
     loadingPrompt: "\u2014\u6B63\u5728\u5BFB\u627E\u68EE\u6797\u7EBF\u7D22\uFF0C\u8BF7\u7A0D\u540E\u2014"
   - GameName: "\u592A\u7A7A\u5DE5\u7A0B\u5E08"
     SceneName:
@@ -268,12 +256,6 @@ MonoBehaviour:
     Logo:
     - {fileID: 21300000, guid: 19dc0d22739b8a34092368b28f616151, type: 3}
     - {fileID: 21300000, guid: 7fac5eacd3990b046b6fa7d6d191fcd7, type: 3}
-    audioClips:
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
     loadingPrompt: "\u2014\u6B63\u5728\u542F\u52A8\u592A\u7A7A\u4EFB\u52A1\uFF0C\u8BF7\u7A0D\u540E\u2014"
   - GameName: "\u6D77\u6D0B\u5B88\u62A4\u961F"
     SceneName:
@@ -286,12 +268,6 @@ MonoBehaviour:
     Logo:
     - {fileID: 21300000, guid: e9cd72e7ec8454b42a13dd226f1172a9, type: 3}
     - {fileID: 21300000, guid: 4523412a6a33d6e459f45293bc99f362, type: 3}
-    audioClips:
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
-    - {fileID: 8300000, guid: a06c68b5a83f98d4ba731f61cfabad1b, type: 3}
     loadingPrompt: "\u2014\u6B63\u5728\u63A2\u7D22\u6D77\u6D0B\u4EFB\u52A1\uFF0C\u8BF7\u7A0D\u540E\u2014"
   LoadingTimerImage: {fileID: 2399672317004251002}
   LoadingNumber: {fileID: 3838605958165304860}
@@ -300,7 +276,6 @@ MonoBehaviour:
   BackgroundImage: {fileID: 64327157277775623}
   Myself: {fileID: 2187267580089535561}
   FadeDuration: 0.5
-  audioSource: {fileID: 5036415738869459546}
   HideObj:
   - {fileID: 4323149682470847599}
   - {fileID: 8158518268200563227}
@@ -316,7 +291,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
-  m_PlayOnAwake: 1
+  m_PlayOnAwake: 0
   m_Volume: 1
   m_Pitch: 1
   Loop: 0
@@ -504,7 +479,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectMode: 3
-  m_EffectFactor: 0.636
+  m_EffectFactor: 1
   m_TransitionTexture: {fileID: 2800000, guid: 3e04c247fb2604af186173fce0bc62de, type: 3}
   m_EffectArea: 0
   m_KeepAspectRatio: 0

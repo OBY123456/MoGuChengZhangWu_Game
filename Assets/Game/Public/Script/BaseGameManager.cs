@@ -16,7 +16,10 @@ public abstract class BaseGameManager : MonoBehaviour
     [Header("音频")]
     public AudioSource BGM;
     public AudioSource PreparationVoiceSource;
-    public AudioClip PreparationVoiceClip;
+
+    [Tooltip("准备语音：0为中文，1为英文，根据当前语言播放。未配置对应语音时跳过。")]
+    public AudioClip[] PreparationVoiceClip = new AudioClip[2];
+
     public bool WaitForExternalPreparationVoice;
 
     [Header("时间")]
@@ -39,6 +42,7 @@ public abstract class BaseGameManager : MonoBehaviour
 
     public bool IsGameRunning { get; private set; }
     public bool IsPreparing { get; private set; }
+
     protected int leftScore, rightScore;
     protected float gameTimer, questionTimer;
     protected bool questionTimerRunning, questionResolved;
@@ -50,7 +54,11 @@ public abstract class BaseGameManager : MonoBehaviour
     private int displayedLeftScore, displayedRightScore;
     private int leftScoreTweenTarget, rightScoreTweenTarget;
     private Tween leftScoreTween, rightScoreTween;
-    protected bool IsScoreRolling => (leftScoreTween != null && leftScoreTween.IsActive()) || (rightScoreTween != null && rightScoreTween.IsActive());
+
+    protected bool IsScoreRolling =>
+        (leftScoreTween != null && leftScoreTween.IsActive()) ||
+        (rightScoreTween != null && rightScoreTween.IsActive());
+
     private int pendingGameplayActions;
     private bool gameEndRequested;
     private static int nextAnswerEffectOrder;
@@ -81,70 +89,121 @@ public abstract class BaseGameManager : MonoBehaviour
     {
         RefreshTimerUI();
         RefreshLocalizedScoreTexts();
+
         if (readyGoStarted) return;
-        if (!startupOwnedBySceneControl && AutoReadyGoOnDirectSceneStart) StartPreparation();
+
+        if (!startupOwnedBySceneControl && AutoReadyGoOnDirectSceneStart)
+            StartPreparation();
     }
 
     private void AgainCallback(EventParamete data)
     {
-        if (!sceneExitRequested && !IsGameRunning && !IsPreparing) StartPreparation();
+        if (!sceneExitRequested && !IsGameRunning && !IsPreparing)
+            StartPreparation();
     }
 
     public void BeginReadyGoFromSceneControl()
     {
-        if (sceneExitRequested || SceneControl.IsTransitionInProgress) return;
+        if (sceneExitRequested || SceneControl.IsTransitionInProgress)
+            return;
+
         startupOwnedBySceneControl = false;
-        if (isActiveAndEnabled) StartPreparation();
+
+        if (isActiveAndEnabled)
+            StartPreparation();
     }
 
     /// <summary>先生成题目/棋盘，再播准备语音；准备阶段不计时、不接收游戏输入。</summary>
     public void StartPreparation()
     {
-        if (sceneExitRequested || startupOwnedBySceneControl || SceneControl.IsTransitionInProgress || IsGameRunning || IsPreparing || readyGoStarted) return;
+        if (sceneExitRequested ||
+            startupOwnedBySceneControl ||
+            SceneControl.IsTransitionInProgress ||
+            IsGameRunning ||
+            IsPreparing ||
+            readyGoStarted)
+        {
+            return;
+        }
+
         IsPreparing = true;
         StopBGM();
-        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+
+        if (nextQuestionRoutine != null)
+            StopCoroutine(nextQuestionRoutine);
+
         nextQuestionRoutine = null;
-        if (readyGoPanel != null) readyGoPanel.CancelCountdown();
+
+        if (readyGoPanel != null)
+            readyGoPanel.CancelCountdown();
+
         ResetRoundState();
+
         // 准备阶段先创建题目并启动动画，随后同步播放 NPC 语音。
         PrepareGameForReadyGo();
-        if (preparationRoutine != null) StopCoroutine(preparationRoutine);
+
+        if (preparationRoutine != null)
+            StopCoroutine(preparationRoutine);
+
         preparationRoutine = StartCoroutine(PreparationFlow());
     }
 
     private IEnumerator PreparationFlow()
     {
+        AudioClip preparationClip = GetPreparationVoiceClip();
+
         if (WaitForExternalPreparationVoice)
         {
             bool done = false;
             externalVoiceFinished = () => done = true;
+
             yield return new WaitUntil(() => done || !IsPreparing);
+
             externalVoiceFinished = null;
-            if (!IsPreparing) yield break;
+
+            if (!IsPreparing)
+                yield break;
         }
-        else if (PreparationVoiceSource != null && PreparationVoiceClip != null)
+        else if (PreparationVoiceSource != null && preparationClip != null)
         {
             PreparationVoiceSource.Stop();
             PreparationVoiceSource.loop = false;
-            PreparationVoiceSource.clip = PreparationVoiceClip;
+            PreparationVoiceSource.clip = preparationClip;
             PreparationVoiceSource.Play();
-            // 音频暂停时 isPlaying 也会是 false，至少等待语音本身的时长。
-            yield return new WaitForSecondsRealtime(PreparationVoiceClip.length);
-            yield return new WaitWhile(() => PreparationVoiceSource != null && PreparationVoiceSource.isPlaying && IsPreparing);
-            if (!IsPreparing) yield break;
+
+            // 音频暂停时 isPlaying 也会是 false，
+            // 至少等待当前语言语音本身的时长。
+            yield return new WaitForSecondsRealtime(preparationClip.length);
+
+            yield return new WaitWhile(() =>
+                PreparationVoiceSource != null &&
+                PreparationVoiceSource.isPlaying &&
+                IsPreparing);
+
+            if (!IsPreparing)
+                yield break;
         }
 
         // 语音结束时通知子类；本关的首题动画已在语音期间启动。
-        if (!IsPreparing) yield break;
+        if (!IsPreparing)
+            yield break;
+
         OnPreparationVoiceEnded();
 
         // 语音和首题动画都结束后，再留 1 秒才开始倒计时。
-        yield return new WaitUntil(() => !IsPreparing || IsPreparationVisualReady());
-        if (!IsPreparing) yield break;
+        yield return new WaitUntil(() =>
+            !IsPreparing || IsPreparationVisualReady());
+
+        if (!IsPreparing)
+            yield break;
+
         yield return new WaitForSecondsRealtime(1f);
-        if (!IsPreparing) yield break;
+
+        if (!IsPreparing)
+            yield break;
+
         readyGoStarted = true;
+
         if (readyGoPanel != null && readyGoPanel.isActiveAndEnabled)
         {
             readyGoPanel.PlayCountdown(BeginActualGame);
@@ -154,7 +213,23 @@ public abstract class BaseGameManager : MonoBehaviour
         BeginActualGame();
     }
 
-    public void NotifyPreparationVoiceFinished() { externalVoiceFinished?.Invoke(); }
+    private AudioClip GetPreparationVoiceClip()
+    {
+        int index = LanguageManger.Instance != null && LanguageManger.Instance.GetLanguageType() == LanguageType.英文 ? 1 : 0;
+
+        if (PreparationVoiceClip == null ||
+            index >= PreparationVoiceClip.Length)
+        {
+            return null;
+        }
+
+        return PreparationVoiceClip[index];
+    }
+
+    public void NotifyPreparationVoiceFinished()
+    {
+        externalVoiceFinished?.Invoke();
+    }
 
     protected virtual void PrepareGameForReadyGo() { }
     protected virtual void OnPreparationVoiceEnded() { }
@@ -165,15 +240,25 @@ public abstract class BaseGameManager : MonoBehaviour
 
     private void BeginActualGame()
     {
-        if (sceneExitRequested || SceneControl.IsTransitionInProgress || IsGameRunning || !IsPreparing || !readyGoStarted) return;
+        if (sceneExitRequested || SceneControl.IsTransitionInProgress || IsGameRunning || !IsPreparing || !readyGoStarted)
+        {
+            return;
+        }
+
         IsPreparing = false;
         readyGoStarted = false;
         preparationRoutine = null;
+
         ResetRoundState();
         IsGameRunning = true;
         InitGame();
         RefreshTimerUI();
-        if (IsGameRunning && BGM != null) { BGM.Stop(); BGM.Play(); }
+
+        if (IsGameRunning && BGM != null)
+        {
+            BGM.Stop();
+            BGM.Play();
+        }
     }
 
     private void ResetRoundState()
@@ -194,18 +279,28 @@ public abstract class BaseGameManager : MonoBehaviour
 
     protected virtual void Update()
     {
-        if (!IsGameRunning) return;
-        if (gameEndRequested) { RefreshTimerUI(); return; }
+        if (!IsGameRunning)
+            return;
+
+        if (gameEndRequested)
+        {
+            RefreshTimerUI();
+            return;
+        }
+
         gameTimer = Mathf.Min(GameDuration, gameTimer + Time.deltaTime);
+
         if (gameTimer >= GameDuration)
         {
             GameEnd(DetermineResult());
             RefreshTimerUI();
             return;
         }
+
         if (questionTimerRunning && !questionResolved)
         {
             questionTimer -= Time.deltaTime;
+
             if (questionTimer <= 0)
             {
                 questionTimer = 0;
@@ -214,6 +309,7 @@ public abstract class BaseGameManager : MonoBehaviour
                 OnQuestionTimeout();
             }
         }
+
         RefreshTimerUI();
     }
 
@@ -225,16 +321,26 @@ public abstract class BaseGameManager : MonoBehaviour
         RefreshTimerUI();
     }
 
-    protected void StopQuestionTimer() { questionTimerRunning = false; RefreshTimerUI(); }
+    protected void StopQuestionTimer()
+    {
+        questionTimerRunning = false;
+        RefreshTimerUI();
+    }
 
     /// <summary>开始一个必须完成的操作，例如答案飞行及其判定。</summary>
-    protected void BeginProtectedAction() { pendingGameplayActions++; }
+    protected void BeginProtectedAction()
+    {
+        pendingGameplayActions++;
+    }
 
     /// <summary>所有已开始的操作结束后，才允许真正结算整局。</summary>
     protected void EndProtectedAction()
     {
         pendingGameplayActions = Mathf.Max(0, pendingGameplayActions - 1);
-        if (pendingGameplayActions == 0 && gameEndRequested && IsGameRunning)
+
+        if (pendingGameplayActions == 0 &&
+            gameEndRequested &&
+            IsGameRunning)
         {
             gameEndRequested = false;
             GameEnd(DetermineResult());
@@ -244,77 +350,139 @@ public abstract class BaseGameManager : MonoBehaviour
     protected virtual void OnGameEndWaitingForActions() { }
 
     /// <summary>传入 UI 屏幕坐标，生成 Z=0 的世界空间 SpriteRenderer 特效。</summary>
-    protected GameObject PlayAnswerEffect(bool correct, Vector2 screenPosition)
+    protected GameObject PlayAnswerEffect(
+        bool correct, Vector2 screenPosition)
     {
         int index = correct ? 0 : 1;
-        if (AnswerEff == null || index >= AnswerEff.Length || AnswerEff[index] == null) return null;
-        Camera camera = AnswerEffectCamera != null ? AnswerEffectCamera : Camera.main;
-        if (camera == null) { Debug.LogWarning("答题特效：没有找到带 MainCamera 标签的相机。", this); return null; }
+
+        if (AnswerEff == null || index >= AnswerEff.Length || AnswerEff[index] == null)
+        {
+            return null;
+        }
+
+        Camera camera = AnswerEffectCamera != null
+            ? AnswerEffectCamera
+            : Camera.main;
+
+        if (camera == null)
+        {
+            Debug.LogWarning(
+                "答题特效：没有找到带 MainCamera 标签的相机。", this);
+            return null;
+        }
 
         Ray ray = camera.ScreenPointToRay(screenPosition);
         Plane plane = new Plane(Vector3.forward, Vector3.zero);
-        if (!plane.Raycast(ray, out float distance)) return null;
+
+        if (!plane.Raycast(ray, out float distance))
+            return null;
+
         Vector3 worldPosition = ray.GetPoint(distance);
         worldPosition.z = 0f;
 
         GameObject effect = LeanPool.Spawn(AnswerEff[index], worldPosition, Quaternion.identity, null);
-        if (effect == null) return null;
+
+        if (effect == null)
+            return null;
+
         effect.transform.SetParent(null, true);
         effect.transform.position = worldPosition;
 
         int order = Mathf.Clamp(AnswerEffectSortingOrder, -20000, 10000) + (nextAnswerEffectOrder++ % 1000) * 16;
+
         SpriteRenderer[] renderers = effect.GetComponentsInChildren<SpriteRenderer>(true);
-        for (int i = 0; i < renderers.Length; i++) renderers[i].sortingOrder = Mathf.Clamp(order + i, -32768, 32767);
-        if (renderers.Length == 0) Debug.LogWarning("答题特效预制体没有 SpriteRenderer。", effect);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].sortingOrder =
+                Mathf.Clamp(order + i, -32768, 32767);
+        }
+
+        if (renderers.Length == 0)
+        {
+            Debug.LogWarning(
+                "答题特效预制体没有 SpriteRenderer。", effect);
+        }
 
         PlaySprite player = effect.GetComponentInChildren<PlaySprite>(true);
-        if (player != null) { player.Reset(); player.Play(); }
-        LeanPool.Despawn(effect, Mathf.Max(0.01f, AnswerEffectLifetime));
+
+        if (player != null)
+        {
+            player.Reset();
+            player.Play();
+        }
+
+        LeanPool.Despawn(
+            effect, Mathf.Max(0.01f, AnswerEffectLifetime));
+
         return effect;
     }
 
     protected void ScheduleNextQuestion(Action action)
     {
-        if (gameEndRequested) return;
-        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+        if (gameEndRequested)
+            return;
+
+        if (nextQuestionRoutine != null)
+            StopCoroutine(nextQuestionRoutine);
+
         nextQuestionRoutine = StartCoroutine(NextQuestionFlow(action));
     }
 
     private IEnumerator NextQuestionFlow(Action action)
     {
         StopQuestionTimer();
+
         yield return new WaitForSeconds(NextQuestionInterval);
         yield return new WaitUntil(() => pendingGameplayActions == 0 || !IsGameRunning);
+
         nextQuestionRoutine = null;
-        if (IsGameRunning && !gameEndRequested) action?.Invoke();
+
+        if (IsGameRunning && !gameEndRequested)
+            action?.Invoke();
     }
 
-    protected virtual void OnQuestionTimeout() { ScheduleNextQuestion(CreateNextQuestion); }
+    protected virtual void OnQuestionTimeout()
+    {
+        ScheduleNextQuestion(CreateNextQuestion);
+    }
 
     protected virtual void RefreshTimerUI()
     {
         if (QuestionTimerImage != null)
+        {
             QuestionTimerImage.fillAmount = Mathf.Clamp01(questionTimer / Mathf.Max(0.01f, QuestionDuration));
+        }
 
         if (GameTimerText != null)
         {
-            int s = Mathf.CeilToInt(Mathf.Max(0, GameDuration - gameTimer));
+            int s = Mathf.CeilToInt(
+                Mathf.Max(0, GameDuration - gameTimer));
+
             GameTimerText.text = $"{s / 60:00}:{s % 60:00}";
         }
     }
 
     public virtual void AddLeftScore(int points)
     {
-        if (!IsGameRunning) return;
-        leftScore = (int)Math.Min(int.MaxValue, Math.Max(0L, (long)leftScore + points));
+        if (!IsGameRunning)
+            return;
+
+        leftScore = (int)Math.Min(
+            int.MaxValue, Math.Max(0L, (long)leftScore + points));
+
         RefreshLeftScoreDisplay(true);
         OnBattleScoreChanged(leftScore, rightScore);
     }
 
     public virtual void AddRightScore(int points)
     {
-        if (!IsGameRunning) return;
-        rightScore = (int)Math.Min(int.MaxValue, Math.Max(0L, (long)rightScore + points));
+        if (!IsGameRunning)
+            return;
+
+        rightScore = (int)Math.Min(
+            int.MaxValue, Math.Max(0L, (long)rightScore + points));
+
         RefreshRightScoreDisplay(true);
         OnBattleScoreChanged(leftScore, rightScore);
     }
@@ -323,6 +491,7 @@ public abstract class BaseGameManager : MonoBehaviour
     {
         leftScore = Mathf.Max(0, left);
         rightScore = Mathf.Max(0, right);
+
         RefreshLeftScoreDisplay(IsGameRunning);
         RefreshRightScoreDisplay(IsGameRunning);
         OnBattleScoreChanged(leftScore, rightScore);
@@ -330,7 +499,9 @@ public abstract class BaseGameManager : MonoBehaviour
 
     private void ConfigureQuestionTimerImage()
     {
-        if (QuestionTimerImage == null) return;
+        if (QuestionTimerImage == null)
+            return;
+
         QuestionTimerImage.type = Image.Type.Filled;
         QuestionTimerImage.fillMethod = Image.FillMethod.Horizontal;
         QuestionTimerImage.fillOrigin = (int)Image.OriginHorizontal.Left;
@@ -340,18 +511,23 @@ public abstract class BaseGameManager : MonoBehaviour
     private void SetDisplayedLeftScore(int value)
     {
         displayedLeftScore = value;
-        if (leftScoreText != null) leftScoreText.text = FormatScore(value);
+
+        if (leftScoreText != null)
+            leftScoreText.text = FormatScore(value);
     }
 
     private void SetDisplayedRightScore(int value)
     {
         displayedRightScore = value;
-        if (rightScoreText != null) rightScoreText.text = FormatScore(value);
+
+        if (rightScoreText != null)
+            rightScoreText.text = FormatScore(value);
     }
 
     private static string FormatScore(int value)
     {
-        string unit = LanguageManger.Instance != null ? LanguageManger.Instance.GetValue("分") : "分";
+        string unit = LanguageManger.Instance != null? LanguageManger.Instance.GetValue("分"): "分";
+
         return value + " " + (string.IsNullOrWhiteSpace(unit) ? "分" : unit.Trim());
     }
 
@@ -363,78 +539,156 @@ public abstract class BaseGameManager : MonoBehaviour
 
     private void RefreshLeftScoreDisplay(bool animate)
     {
-        if (animate && leftScoreTween != null && leftScoreTweenTarget == leftScore) return;
-        if (leftScoreTween != null) leftScoreTween.Kill();
+        if (animate &&
+            leftScoreTween != null &&
+            leftScoreTweenTarget == leftScore)
+        {
+            return;
+        }
+
+        if (leftScoreTween != null)
+            leftScoreTween.Kill();
+
         leftScoreTween = null;
         leftScoreTweenTarget = leftScore;
-        if (!animate || leftScoreText == null || ScoreRollDuration <= 0f || displayedLeftScore == leftScore)
+
+        if (!animate ||
+            leftScoreText == null ||
+            ScoreRollDuration <= 0f ||
+            displayedLeftScore == leftScore)
         {
             SetDisplayedLeftScore(leftScore);
             return;
         }
 
-        leftScoreTween = DOTween.To(() => displayedLeftScore, SetDisplayedLeftScore, leftScore, ScoreRollDuration).SetEase(ScoreRollEase).OnComplete(() => { SetDisplayedLeftScore(leftScore); leftScoreTween = null; });
+        leftScoreTween = DOTween.To(
+                () => displayedLeftScore,
+                SetDisplayedLeftScore,
+                leftScore,
+                ScoreRollDuration)
+            .SetEase(ScoreRollEase)
+            .OnComplete(() =>
+            {
+                SetDisplayedLeftScore(leftScore);
+                leftScoreTween = null;
+            });
+
         leftScoreTween.Play();
     }
 
     private void RefreshRightScoreDisplay(bool animate)
     {
-        if (animate && rightScoreTween != null && rightScoreTweenTarget == rightScore) return;
-        if (rightScoreTween != null) rightScoreTween.Kill();
+        if (animate &&
+            rightScoreTween != null &&
+            rightScoreTweenTarget == rightScore)
+        {
+            return;
+        }
+
+        if (rightScoreTween != null)
+            rightScoreTween.Kill();
+
         rightScoreTween = null;
         rightScoreTweenTarget = rightScore;
-        if (!animate || rightScoreText == null || ScoreRollDuration <= 0f || displayedRightScore == rightScore)
+
+        if (!animate ||
+            rightScoreText == null ||
+            ScoreRollDuration <= 0f ||
+            displayedRightScore == rightScore)
         {
             SetDisplayedRightScore(rightScore);
             return;
         }
 
-        rightScoreTween = DOTween.To(() => displayedRightScore, SetDisplayedRightScore, rightScore, ScoreRollDuration).SetEase(ScoreRollEase).OnComplete(() => { SetDisplayedRightScore(rightScore); rightScoreTween = null; });
+        rightScoreTween = DOTween.To(
+                () => displayedRightScore,
+                SetDisplayedRightScore,
+                rightScore,
+                ScoreRollDuration)
+            .SetEase(ScoreRollEase)
+            .OnComplete(() =>
+            {
+                SetDisplayedRightScore(rightScore);
+                rightScoreTween = null;
+            });
+
         rightScoreTween.Play();
     }
 
     private void KillScoreTweens()
     {
-        if (leftScoreTween != null) leftScoreTween.Kill();
-        if (rightScoreTween != null) rightScoreTween.Kill();
+        if (leftScoreTween != null)
+            leftScoreTween.Kill();
+
+        if (rightScoreTween != null)
+            rightScoreTween.Kill();
+
         leftScoreTween = null;
         rightScoreTween = null;
     }
 
     protected virtual void OnBattleScoreChanged(int left, int right) { }
+
     public int GetLeftScore() => leftScore;
     public int GetRightScore() => rightScore;
-    public float GetRemainingTime() => Mathf.Max(0, GameDuration - gameTimer);
+
+    public float GetRemainingTime() =>
+        Mathf.Max(0, GameDuration - gameTimer);
 
     protected virtual ResultType DetermineResult()
     {
-        if (leftScore > rightScore) return ResultType.左边胜利;
-        if (rightScore > leftScore) return ResultType.右边胜利;
+        if (leftScore > rightScore)
+            return ResultType.左边胜利;
+
+        if (rightScore > leftScore)
+            return ResultType.右边胜利;
+
         return ResultType.平局;
     }
 
     public virtual void GameEnd(ResultType result)
     {
-        if (!IsGameRunning) return;
+        if (!IsGameRunning)
+            return;
+
         if (pendingGameplayActions > 0)
         {
-            if (!gameEndRequested) OnGameEndWaitingForActions();
+            if (!gameEndRequested)
+                OnGameEndWaitingForActions();
+
             gameEndRequested = true;
             StopQuestionTimer();
             return;
         }
+
         gameEndRequested = false;
         IsGameRunning = false;
         StopQuestionTimer();
-        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+
+        if (nextQuestionRoutine != null)
+            StopCoroutine(nextQuestionRoutine);
+
         nextQuestionRoutine = null;
         CleanupGame();
-        if (BGM != null) BGM.Stop();
-        if (EndPanel.Instance != null) EndPanel.Instance.ShowResult(result, leftScore, rightScore);
+
+        if (BGM != null)
+            BGM.Stop();
+
+        if (EndPanel.Instance != null)
+            EndPanel.Instance.ShowResult(result, leftScore, rightScore);
     }
 
-    public void GameEndBattle(int left, int right) { SetBattleScores(left, right); GameEnd(DetermineResult()); }
-    public void ForceEndGame() { if (IsGameRunning) GameEnd(DetermineResult()); }
+    public void GameEndBattle(int left, int right)
+    {
+        SetBattleScores(left, right);
+        GameEnd(DetermineResult());
+    }
+
+    public void ForceEndGame()
+    {
+        if (IsGameRunning)
+            GameEnd(DetermineResult());
+    }
 
     /// <summary>安全停止背景音乐，供 Awake 和准备流程调用。</summary>
     private void StopBGM()
@@ -445,22 +699,36 @@ public abstract class BaseGameManager : MonoBehaviour
 
     public virtual void CancelForSceneExit()
     {
-        if (sceneExitRequested) return;
+        if (sceneExitRequested)
+            return;
+
         sceneExitRequested = true;
         IsGameRunning = IsPreparing = false;
         readyGoStarted = false;
         pendingGameplayActions = 0;
         gameEndRequested = false;
         KillScoreTweens();
-        if (preparationRoutine != null) StopCoroutine(preparationRoutine);
-        if (nextQuestionRoutine != null) StopCoroutine(nextQuestionRoutine);
+
+        if (preparationRoutine != null)
+            StopCoroutine(preparationRoutine);
+
+        if (nextQuestionRoutine != null)
+            StopCoroutine(nextQuestionRoutine);
+
         preparationRoutine = null;
         nextQuestionRoutine = null;
         externalVoiceFinished = null;
-        if (readyGoPanel != null) readyGoPanel.CancelCountdown();
+
+        if (readyGoPanel != null)
+            readyGoPanel.CancelCountdown();
+
         CleanupGame();
-        if (BGM != null) BGM.Stop();
-        if (PreparationVoiceSource != null) PreparationVoiceSource.Stop();
+
+        if (BGM != null)
+            BGM.Stop();
+
+        if (PreparationVoiceSource != null)
+            PreparationVoiceSource.Stop();
     }
 
     protected virtual void OnDestroy()
@@ -468,5 +736,14 @@ public abstract class BaseGameManager : MonoBehaviour
         CancelForSceneExit();
         SceneControl.UnregisterGameManagerForStartup(this);
         EventManager.RemoveListener(GenericEventEnumType.Generic, "Again", AgainCallback);
+    }
+
+    void OnValidate()
+    {
+        // 无论面板怎么改，只要长度不是2，就强制改成2
+        if (PreparationVoiceClip == null || PreparationVoiceClip.Length != 2)
+        {
+            System.Array.Resize(ref PreparationVoiceClip, 2);
+        }
     }
 }

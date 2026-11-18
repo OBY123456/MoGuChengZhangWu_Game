@@ -306,7 +306,6 @@ GameObject:
   - component: {fileID: 303017208}
   - component: {fileID: 303017207}
   - component: {fileID: 303017206}
-  - component: {fileID: 303017209}
   m_Layer: 5
   m_Name: Logo
   m_TagString: Untagged
@@ -383,25 +382,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 303017204}
   m_CullTransparentMesh: 0
---- !u!95 &303017209
-Animator:
-  serializedVersion: 3
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 303017204}
-  m_Enabled: 1
-  m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 583a6f576b0d3674798c7c16d38f2b02, type: 2}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorControllerStateOnDisable: 0
 --- !u!1 &309124773
 GameObject:
   m_ObjectHideFlags: 0
@@ -496,9 +476,9 @@ AudioSource:
   m_Enabled: 1
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
-  m_audioClip: {fileID: 8300000, guid: 71f56356d91d4924c9c7830ad44bc4cd, type: 3}
+  m_audioClip: {fileID: 8300000, guid: 1f8ddc7368a319b4094ad8f937a4e45d, type: 3}
   m_PlayOnAwake: 1
-  m_Volume: 1
+  m_Volume: 0.5
   m_Pitch: 1
   Loop: 1
   Mute: 0
@@ -750,6 +730,7 @@ GameObject:
   - component: {fileID: 1001136782}
   - component: {fileID: 1001136784}
   - component: {fileID: 1001136783}
+  - component: {fileID: 1001136785}
   m_Layer: 5
   m_Name: Panel
   m_TagString: Untagged
@@ -819,6 +800,26 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1001136781}
   m_CullTransparentMesh: 0
+--- !u!114 &1001136785
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1001136781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ecf8aa7789074143b73c820ace8493c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rects:
+  - {fileID: 1554391247}
+  - {fileID: 652642090}
+  - {fileID: 1972789006}
+  - {fileID: 1402987465}
+  breatheScale: 1.02
+  breatheDuration: 2
+  ignoreTimeScale: 1
 --- !u!1 &1382112258
 GameObject:
   m_ObjectHideFlags: 0

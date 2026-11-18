@@ -78,6 +78,10 @@ public class EndPanel : MonoBehaviour
     [Min(0.05f)] public float ExitDuration = 0.20f;
     [Range(0.5f, 1f)] public float BackgroundStartScale = 0.88f;
 
+    [Header("对应SceneControl里面的SceneDatas的顺序，第五关结算的时候，先播放胜利/失败音效，再播放这个语音，这个语音播放完成才开始倒计时返回首页")]
+    public AudioClip[] audioClips_cn = new AudioClip[4];
+    public AudioClip[] audioClips_en = new AudioClip[4];
+
     private sealed class UiPart
     {
         public RectTransform Rect;
@@ -92,11 +96,13 @@ public class EndPanel : MonoBehaviour
     private bool isShowing;
     private bool transitionRequested;
     private bool isLastLevel;
+    private bool finalVoiceFinished;
     private bool buttonsBound;
     private int sessionId;
     private Sequence entranceSequence;
     private Tween exitTween;
     private Coroutine countdownRoutine;
+    private Coroutine resultAudioRoutine;
     private Vector3 backgroundScale = Vector3.one;
 
     private void Awake()
@@ -169,6 +175,7 @@ public class EndPanel : MonoBehaviour
         transitionRequested = false;
 
         isLastLevel = IsCurrentGameLastLevel();
+        finalVoiceFinished = !isLastLevel;
         ApplyContent(result);
         SetButtonsEnabled(false);
         Myself.alpha = 0f;
@@ -280,6 +287,12 @@ public class EndPanel : MonoBehaviour
 
     private IEnumerator AutoNextCountdown(int id)
     {
+        while (isLastLevel && !finalVoiceFinished && isShowing && !transitionRequested && sessionId == id) yield return null;
+        if (sessionId != id || !isShowing || transitionRequested)
+        {
+            countdownRoutine = null;
+            yield break;
+        }
         float endTime = Time.realtimeSinceStartup + Mathf.Max(1f, autoNextCountDown);
         int lastSecond = -1;
         while (isShowing && !transitionRequested && sessionId == id)
@@ -349,11 +362,69 @@ public class EndPanel : MonoBehaviour
 
     private void PlayResultAudio(ResultType result)
     {
-        if (_audioSource == null) return;
+        if (_audioSource == null)
+        {
+            finalVoiceFinished = true;
+            return;
+        }
         _audioSource.Stop();
+        _audioSource.loop = false;
         int index = result == ResultType.平局 ? 1 : 0;
         AudioClip clip = PickClip(audioClip, index);
         if (clip != null) _audioSource.PlayOneShot(clip);
+        if (isLastLevel) resultAudioRoutine = StartCoroutine(PlayFinalStoryVoice(sessionId, clip, GetFinalStoryClip()));
+    }
+
+    private IEnumerator PlayFinalStoryVoice(int id, AudioClip resultClip, AudioClip storyClip)
+    {
+        if (resultClip != null) yield return new WaitForSecondsRealtime(resultClip.length);
+        yield return new WaitWhile(() => IsAudioSessionActive(id) && _audioSource != null && _audioSource.isPlaying);
+        if (!IsAudioSessionActive(id)) yield break;
+        if (_audioSource != null && storyClip != null)
+        {
+            _audioSource.clip = storyClip;
+            _audioSource.loop = false;
+            _audioSource.Play();
+            yield return new WaitForSecondsRealtime(storyClip.length);
+            yield return new WaitWhile(() => IsAudioSessionActive(id) && _audioSource != null && _audioSource.isPlaying);
+        }
+        if (!IsAudioSessionActive(id)) yield break;
+        finalVoiceFinished = true;
+        resultAudioRoutine = null;
+    }
+
+    private bool IsAudioSessionActive(int id)
+    {
+        return sessionId == id && isShowing && !transitionRequested && !SceneControl.IsTransitionInProgress;
+    }
+
+    private AudioClip GetFinalStoryClip()
+    {
+        SceneControl controller = SceneControl.Instance;
+        if (controller == null || controller.SceneDatas == null) return null;
+        string activeScene = SceneManager.GetActiveScene().name;
+        SceneData currentData = controller.CurrentGameData;
+        int gameIndex = -1;
+        if (currentData != null && currentData.SceneName != null && Array.IndexOf(currentData.SceneName, activeScene) >= 0) gameIndex = controller.SceneDatas.IndexOf(currentData);
+        if (gameIndex < 0)
+        {
+            for (int i = 0; i < controller.SceneDatas.Count; i++)
+            {
+                SceneData data = controller.SceneDatas[i];
+                if (data == null || data.SceneName == null || Array.IndexOf(data.SceneName, activeScene) < 0) continue;
+                gameIndex = i;
+                break;
+            }
+        }
+        bool english = LanguageManger.Instance != null && LanguageManger.Instance.GetLanguageType() == LanguageType.英文;
+        return PickClip(english ? audioClips_en : audioClips_cn, gameIndex);
+    }
+
+    private void StopResultAudio()
+    {
+        if (resultAudioRoutine != null) StopCoroutine(resultAudioRoutine);
+        resultAudioRoutine = null;
+        if (_audioSource != null) _audioSource.Stop();
     }
 
     private static Sprite PickSprite(Sprite[] sprites, int index)
@@ -479,6 +550,7 @@ public class EndPanel : MonoBehaviour
 
     private void StopAnimations()
     {
+        StopResultAudio();
         if (countdownRoutine != null) StopCoroutine(countdownRoutine);
         if (entranceSequence != null) entranceSequence.Kill();
         if (exitTween != null) exitTween.Kill();
