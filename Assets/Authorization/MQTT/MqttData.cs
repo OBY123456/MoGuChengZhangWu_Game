@@ -32,14 +32,17 @@ namespace MqttData
     /// </summary>
     public enum MsgType
     {
-        心跳包 = 1,
-        安装应用 = 2,
-        播放视频_启动游戏 = 3,
-        获取当前设备已安装产品 = 4,
-        下载应用_视频成功通知 = 5,
-        获取服务器视频_游戏列表 = 6,
-        设置参数 = 7,
-        获取设备硬件信息 = 8,
+        心跳包 = 0x01,
+        安装应用 = 0x02,
+        播放视频_启动游戏 = 0x03,
+        获取当前设备已安装产品 = 0x04,
+        下载应用_视频成功通知 = 0x05,
+        获取服务器视频_游戏列表 = 0x06,
+        设置参数 = 0x07,
+        获取设备硬件信息 = 0x08,
+        支付成功通知 = 0x09,
+        照片墙图片推送 = 0x0A,
+        游戏结束请求抽奖 = 0x0B
     }
 
     public enum NetType
@@ -185,6 +188,80 @@ namespace MqttData
         /// 1已安装 0未安装
         /// </summary>
         public int IsInstall;
+    }
+
+    public class CS_抽奖请求
+    {
+        /// <summary>
+        /// 本局游戏的唯一ID必填，如果收到重复会返回历史抽奖结果
+        /// </summary>
+        public string GameSessionId;
+
+        /// <summary>
+        /// 预留的，暂时传空值，后续如果需要扩展玩家信息再用
+        /// </summary>
+        public string OpenId;
+
+        public CS_抽奖请求() { }
+
+        public CS_抽奖请求(string _GameSessionId, string _OpenId)
+        {
+            GameSessionId = _GameSessionId;
+            OpenId = _OpenId;
+        }
+    }
+
+    public class SC_抽奖请求
+    {
+        /// <summary>
+        /// 与请求一致/一致
+        /// </summary>
+        public string GameSessionId;
+
+        /// <summary>
+        /// 0=未中奖不打印券；1=打印
+        /// </summary>
+        public int HasCoupon;
+
+        /// <summary>
+        /// 券码
+        /// </summary>
+        public string IssueNo;
+
+        /// <summary>
+        /// 店铺名
+        /// </summary>
+        public string ShopName;
+
+        /// <summary>
+        /// 优惠标题
+        /// </summary>
+        public string Title;
+
+        /// <summary>
+        /// 有效日期  yyyy-MM-dd
+        /// </summary>
+        public string ValidDate;
+
+        /// <summary>
+        /// 限用星期，如「星期一至星期五」
+        /// </summary>
+        public string WeekDayText;
+
+        /// <summary>
+        /// 店铺地址
+        /// </summary>
+        public string ShopAddress;
+
+        /// <summary>
+        /// 二维码内容（必用）
+        /// </summary>
+        public string QrCodeContent;
+
+        /// <summary>
+        /// 与 QrCodeContent 相同，兼容字段
+        /// </summary>
+        public string VerifyQrCode;
     }
 }
 

@@ -17,7 +17,7 @@ public class LanguageManger : MonoSingle<LanguageManger>
     protected override void Awake()
     {
         base.Awake();
-        languageType = LanguageType.中文;
+        languageType = LanguageType.英文;
     }
 
     /// <summary>

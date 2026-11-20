@@ -14,7 +14,7 @@ public class MQTT
 {
     MqttClient mqttClient;
 
-    public static readonly string Host = "api.itaocow.com.cn";
+    public static readonly string Host = "www.junziboy.com";
 
     public static readonly int Port = 7020;
 
@@ -157,6 +157,7 @@ public class MQTT
             msg = Encoding.UTF8.GetString(bs.ToArray());
             if(!string.IsNullOrEmpty(msg) && !string.IsNullOrWhiteSpace(msg))
             {
+                //Debug.Log("Mqtt:" + msg);
                 MqttEvent.MqttData((Newtonsoft.Json.JsonConvert.DeserializeObject<MQTTMsg>(msg)));
             }
         }

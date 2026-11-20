@@ -129,6 +129,11 @@ public class SceneControl : MonoBehaviour
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.F12)) TryLoadNextGameScene();
+    }
+
     private void OnSceneNameReceived(EventParamete parameters)
     {
         if (returningHome || parameters == null) return;
@@ -251,18 +256,18 @@ public class SceneControl : MonoBehaviour
         if (!CanLoadScene(nextSceneName)) return false;
 
         // 只通知一次，不等待控制端回复；离线或发送失败均不影响本地切关。
-        NotifyControllerNextLevel();
+        NotifyControllerSceneOrder(nextSceneName == HomeSceneName ? Order.返回首页 : Order.下一关);
         return TryLoadScene(nextSceneName);
     }
 
-    private static void NotifyControllerNextLevel()
+    private static void NotifyControllerSceneOrder(Order order)
     {
         try
         {
             UDPSend sender = UDPSend.Instance;
-            if (sender != null && sender.IsConnected) sender.TrySend(ClassEnum.OrderData, new OrderData(Order.下一关));
+            if (sender != null && sender.IsConnected) sender.TrySend(ClassEnum.OrderData, new OrderData(order));
         }
-        catch (System.Exception exception) { Debug.LogWarning("通知控制端下一关失败，继续本地切关：" + exception.Message); }
+        catch (System.Exception exception) { Debug.LogWarning($"通知控制端{order}失败，继续本地切换：{exception.Message}"); }
     }
 
     private bool CanLoadScene(string sceneName)

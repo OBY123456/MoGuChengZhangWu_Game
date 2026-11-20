@@ -9,8 +9,6 @@ using Encryption;
 using System.Net;
 using Authorization = Encryption.Authorization;
 using MqttData;
-using UnityEngine.Networking;
-using System.IO;
 
 public class MyMqtt : MonoSingle<MyMqtt>
 {
@@ -21,106 +19,27 @@ public class MyMqtt : MonoSingle<MyMqtt>
 
     public bool IsNetwork = false;
 
-    private static readonly object o = new object();
-
-    private Queue<MQTTMsg> MsgQueue = new Queue<MQTTMsg>();
-
-    // 新版授权的中文、英文MachineKey与Authorization.cs保持一致。
-    private const string MachineKeyCN = "machineCode_CN";
-    private const string MachineKeyEN = "machineCode_EN";
-    private string cachedBaseHardwareCode = string.Empty;
-    private bool hasLoggedReadException;
-
     protected override void Awake()
     {
         base.Awake();
         Loom.Initialize();
-        if (!TryInitializeWithMachineCode())
+        string V1 = string.Empty;
+        string V2 = string.Empty;
+        AESEncryption.PlayerGet(Authorization.MachineKey, HardwareCodeUtil.GetMac(), ref V1, ref V2);
+        if (V1.Equals(V2))
         {
-            Debug.Log("[MyMqtt] 授权设备编码尚未就绪，等待授权系统保存数据。");
-            InvokeRepeating(nameof(RetryInitializeWithMachineCode), 2f, 2f);
-        }
-    }
-
-    private void RetryInitializeWithMachineCode()
-    {
-        if (TryInitializeWithMachineCode()) CancelInvoke(nameof(RetryInitializeWithMachineCode));
-    }
-
-    private bool TryInitializeWithMachineCode()
-    {
-        string authorizedMachineCode;
-        if (!TryReadAuthorizedMachineCode(out authorizedMachineCode)) return false;
-
-        machineCode = authorizedMachineCode;
-        DebugManager.Instance.AddData("设备编码", machineCode);
-        Debug.Log("[MyMqtt] 已读取到当前授权模式的设备编码，开始检查网络。");
-        IsGetHostAsync(MQTT.Host, OnGetHostCallBack);
-        return true;
-    }
-
-    private bool TryReadAuthorizedMachineCode(out string result)
-    {
-        result = string.Empty;
-        try
-        {
-            // 与Authorization.HasLegacySystemData()采用相同判断，避免混用旧版与新版缓存。
-            bool useLegacy = !PlayerPrefs.HasKey(Authorization.GrantSourceKey) &&
-                (PlayerPrefs.HasKey(Authorization.MachineKey) ||
-                 PlayerPrefs.HasKey(Authorization.DateKey) ||
-                 PlayerPrefs.HasKey(Authorization.TimeKey));
-
-            string key;
-            string hardwareCode;
-            if (useLegacy)
+            machineCode = V1;
+            Debug.Log("machineCode==" + machineCode);
+            DebugManager.Instance.AddData("设备编码", machineCode);
+            if (!string.IsNullOrEmpty(machineCode))
             {
-                key = Authorization.MachineKey;
-                if (!PlayerPrefs.HasKey(key)) return false;
-                hardwareCode = GetBaseHardwareCode();
+                IsGetHostAsync(MQTT.Host, OnGetHostCallBack);
             }
             else
             {
-                // 新版必须按当前语言读取，不用另一种语言的编码兜底。
-                if (LanguageManger.Instance == null) return false;
-                bool english = LanguageManger.Instance.GetLanguageType() == LanguageType.英文;
-                key = english ? MachineKeyEN : MachineKeyCN;
-                if (!PlayerPrefs.HasKey(key)) return false;
-
-                // 与Authorization.BuildLanguageHardwareCode()相同的加密密钥算法。
-                string input = GetBaseHardwareCode() + "|LANG=" + (english ? "EN" : "CN");
-                using (MD5 md5 = MD5.Create())
-                {
-                    byte[] hash = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
-                    StringBuilder builder = new StringBuilder(hash.Length * 2);
-                    foreach (byte b in hash) builder.Append(b.ToString("X2"));
-                    hardwareCode = builder.ToString();
-                }
+                DebugManager.LogError("设备不合法");
             }
-
-            string value = string.Empty;
-            string decrypted = string.Empty;
-            AESEncryption.PlayerGet(key, hardwareCode, ref value, ref decrypted);
-            if (string.IsNullOrWhiteSpace(value) || value == "未授权" ||
-                !string.Equals(value, decrypted, StringComparison.Ordinal)) return false;
-
-            result = value;
-            return true;
         }
-        catch (Exception ex)
-        {
-            if (!hasLoggedReadException)
-            {
-                hasLoggedReadException = true;
-                Debug.LogWarning("[MyMqtt] 读取本地授权设备编码失败，将重试。原因：" + ex.Message);
-            }
-            return false;
-        }
-    }
-
-    private string GetBaseHardwareCode()
-    {
-        if (string.IsNullOrEmpty(cachedBaseHardwareCode)) cachedBaseHardwareCode = HardwareCodeUtil.GetMac();
-        return cachedBaseHardwareCode;
     }
 
     void OnGetHostCallBack(bool b)
@@ -145,12 +64,7 @@ public class MyMqtt : MonoSingle<MyMqtt>
 
     private void Start()
     {
-        MqttEvent.Mqttevent += MqttEvent_Mqttevent;
-    }
-
-    private void MqttEvent_Mqttevent(MQTTMsg obj)
-    {
-        MsgQueue.Enqueue(obj);
+        
     }
 
     private void IsGetHostAsync(string host, Action<bool> action)
@@ -212,7 +126,7 @@ public class MyMqtt : MonoSingle<MyMqtt>
         {
             mqtt.Subscribe(machineCode);
             CancelInvoke(nameof(Heartbeat));
-            InvokeRepeating(nameof(Heartbeat),60,60);
+            InvokeRepeating(nameof(Heartbeat),0,6);
         }
     }
 
@@ -226,18 +140,9 @@ public class MyMqtt : MonoSingle<MyMqtt>
         MQTTMsg msg = new MQTTMsg(msgType,data);
         if(mqtt != null && mqtt.IsConnected && !string.IsNullOrEmpty(machineCode) && msg != null)
         {
-            if(Application.platform == RuntimePlatform.Android)
-            {
-                string temp = JsonUtility.ToJson(msg);
-                //Debug.Log("发送==" +temp);
-                mqtt.Publish(machineCode, temp);
-            }
-            else
-            {
-                string temp = JsonConvert.SerializeObject(msg);
-                //Debug.Log("发送==" +temp);
-                mqtt.Publish(machineCode, temp);
-            }
+            string temp = JsonConvert.SerializeObject(msg);
+            Debug.Log("发送==" + temp);
+            mqtt.Publish(machineCode, temp);
         }
     }
 
@@ -247,8 +152,6 @@ public class MyMqtt : MonoSingle<MyMqtt>
         {
             mqtt.DisConnect();
         }
-
-        MqttEvent.Mqttevent -= MqttEvent_Mqttevent;
     }
 
     public static DateTime GetBeiJingTime()
